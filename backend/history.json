@@ -1,0 +1,65 @@
+[
+  {
+    "id": 1,
+    "user_id": "user1",
+    "role": "assistant",
+    "content": "你好！我是你的AI学习助手，很高兴为你服务！请问有什么我可以帮助你的吗？",
+    "timestamp": 1620000000
+  },
+  {
+    "id": 2,
+    "user_id": "user1",
+    "role": "user",
+    "content": "英语",
+    "timestamp": 1783837564
+  },
+  {
+    "id": 3,
+    "user_id": "user1",
+    "role": "assistant",
+    "content": "英语学习需要坚持！你可以每天背单词、看英文电影来提高！",
+    "timestamp": 1783837564
+  },
+  {
+    "id": 4,
+    "user_id": "user1",
+    "role": "user",
+    "content": "数学",
+    "timestamp": 1783837571
+  },
+  {
+    "id": 5,
+    "user_id": "user1",
+    "role": "assistant",
+    "content": "数学是科学的基础！有什么数学问题我可以帮你解答吗？",
+    "timestamp": 1783837571
+  },
+  {
+    "id": 6,
+    "user_id": "user1",
+    "role": "user",
+    "content": "数字",
+    "timestamp": 1783837688
+  },
+  {
+    "id": 7,
+    "user_id": "user1",
+    "role": "assistant",
+    "content": "这是一个很好的问题！关于「数字」，我可以为你提供一些学习建议。首先，你可以通过查阅相关资料来了解基础知识，然后通过实践来加深理解。如果有具体的问题，随时可以问我！",
+    "timestamp": 1783837688
+  },
+  {
+    "id": 8,
+    "user_id": "user1",
+    "role": "user",
+    "content": "你好",
+    "timestamp": 1783837693
+  },
+  {
+    "id": 9,
+    "user_id": "user1",
+    "role": "assistant",
+    "content": "你好呀！😊 很高兴见到你！",
+    "timestamp": 1783837693
+  }
+]

@@ -1,19 +1,40 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import time
+import json
+import os
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "http://localhost:3000"}})
 
-chat_history = [
-    {
-        'id': 1,
-        'user_id': 'user1',
-        'role': 'assistant',
-        'content': '你好！我是你的AI学习助手，很高兴为你服务！请问有什么我可以帮助你的吗？',
-        'timestamp': 1620000000
-    }
-]
+HISTORY_FILE = 'history.json'
+
+def get_default_history():
+    return [
+        {
+            'id': 1,
+            'user_id': 'user1',
+            'role': 'assistant',
+            'content': '你好！我是你的AI学习助手，很高兴为你服务！请问有什么我可以帮助你的吗？',
+            'timestamp': 1620000000
+        }
+    ]
+
+def load_history():
+    if os.path.exists(HISTORY_FILE):
+        try:
+            with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            return get_default_history()
+    else:
+        history = get_default_history()
+        save_history(history)
+        return history
+
+def save_history(history):
+    with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
+        json.dump(history, f, ensure_ascii=False, indent=2)
 
 def generate_ai_response(message):
     responses = {
@@ -39,25 +60,31 @@ def chat():
     message = data.get('message', '')
     user_id = data.get('user_id', 'user1')
     
+    history = load_history()
+    
+    new_id = max(item['id'] for item in history) + 1 if history else 1
+    
     user_message = {
-        'id': len(chat_history) + 1,
+        'id': new_id,
         'user_id': user_id,
         'role': 'user',
         'content': message,
         'timestamp': int(time.time())
     }
-    chat_history.append(user_message)
+    history.append(user_message)
     
     ai_response = generate_ai_response(message)
     
     assistant_message = {
-        'id': len(chat_history) + 1,
+        'id': new_id + 1,
         'user_id': user_id,
         'role': 'assistant',
         'content': ai_response,
         'timestamp': int(time.time())
     }
-    chat_history.append(assistant_message)
+    history.append(assistant_message)
+    
+    save_history(history)
     
     return jsonify({
         'success': True,
@@ -67,11 +94,13 @@ def chat():
 @app.route('/api/history', methods=['GET'])
 def get_history():
     user_id = request.args.get('user_id', 'user1')
-    history = [item for item in chat_history if item['user_id'] == user_id]
+    history = load_history()
+    user_history = [item for item in history if item['user_id'] == user_id]
     return jsonify({
         'success': True,
-        'history': history
+        'history': user_history
     })
 
 if __name__ == '__main__':
+    load_history()
     app.run(debug=True, host='0.0.0.0', port=5000)
