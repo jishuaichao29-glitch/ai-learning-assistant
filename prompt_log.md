@@ -11,7 +11,7 @@
 
 ### 2. 构建后端虚拟环境
 * **原始 Prompt：** “第一步我已经执行成功了，前端代码跑通了。请继续告诉我第二步初始化 Flask 后端的命令。”
-* **功能标注：** 初始化 Flask 后端框架与虚拟环境
+* **功能标注：** 初始化 Flask 后端框架与虚拟环境 `(venv)`，隔离系统级全局 Python 依赖。
 * **过程记录：** ![后端环境搭建命令](image-1.png) 以及 ![虚拟环境创建完毕确认](image-2.png)
 
 ### 3. 生成后端核心接口骨架
@@ -42,19 +42,21 @@
   2、开启跨域支持： 确保安装并配置好 flask_cors，允许前端 3000 端口访问后端的接口。
   请自动创建/修改文件并完成代码编写，写完后请告诉我，并给出在虚拟环境下启动 Flask 后端的命令。”
 * **功能标注：** 修改 `backend/app.py`，实现后端真实对话接口与历史记录 API，集成跨域支持。
-* **过程记录：** ![后端真实对话API生成](image-8.png)
+* **过程记录：** ![后端真实业务逻辑实现](image-8.png)
 
 ### 3. 联调报错异常处理（CORS与依赖缺失）
 * **遇到问题：** 启动后端服务时，终端抛出错误 `ModuleNotFoundError: No module named 'flask_cors'`。
 * **原因分析：** 虚拟环境中缺少跨域处理插件 `flask-cors`。
 * **解决策略：** 保持虚拟环境激活状态，在终端执行 `pip install flask-cors` 手动补齐依赖，并成功启动后端服务。
-* **过程记录：** ![报错信息截图](image-10.png) ➔ ![依赖安装与成功启动](image-9.png)
+* **过程记录：** ![效果测试](image-10.png) ➔ ![依赖安装与成功启动](image-9.png)
 
-### 4. 前后端全线联调测试
+### 4. 前端后全线联调测试
 * **核心工作：** 改写前端 `page.tsx` 代码，利用 `fetch` 异步请求后端的 `/api/chat` 和 `/api/history` 接口，将静态模拟数据替换为动态后端流水。
 * **功能标注：** 改写 `frontend/src/app/chat/page.tsx`，完成前后端全线联调测试。
 * **联调结果：** 页面首次加载能完美读取 Flask 历史记录；输入关键词（如“编程”、“学习”），能精准获得并渲染后端返回的智能答复，全数据链路彻底闭环。
-* **过程记录：** ![联网测试对话](image-11.png) 与 ![浏览器双端数据流向闭环效果](image-12.png)
+* **过程记录：** ![遇到问题](image-11.png) 与 ![AI解决问题](image-12.png)
+
+---
 
 ## 📅 Day 2 拓展：后端数据持久化（JSON文件系统升级）
 
@@ -65,7 +67,26 @@
   > 3、改造 /api/chat 接口：当收到用户新消息并生成 AI 回复后，将最新的对话追加到 history.json 文件中保存。
   > 4、保持跨域配置：确保 flask_cors 依然正常工作。
   > 请完全接管并自动修改代码，完成后请告诉我。”
-  ![alt text](image-13.png)
-  效果：![alt text](image-14.png)
 * **功能标注：** 重构后端 I/O 模块，利用 Python 的 `json` 内置库实现非易失性文件系统级存储，防止因进程关闭导致用户数据丢失。
-* **过程记录：** 后端数据持久化逻辑由 Trae 自动接管并重写成功。
+* **过程记录：** 后端数据持久化逻辑由 Trae 自动接管并重写成功。![JSON数据持久化重构指令](image-13.png) ➔ ![JSON文件落盘与回显效果](image-14.png)+![效果测试](image-15.png)
+
+---
+
+## 📅 Day 2 终极进阶：依赖冲突强杀与 SQL 关系型数据库蜕变
+
+### 1. 克服环境底层编译冲突（安装 Flask-SQLAlchemy）
+* **遇到问题：** 在安装大厂级 ORM 数据库管理工具时，终端抛出严重红字阻塞：`error: Microsoft Visual C++ 14.0 or greater is required`，导致底层依赖 `greenlet` 编译失败。
+* **原因分析：** 1. 初始虚拟环境自带的包管理工具 `pip` 版本过旧，无法正确识别云端已打包好的免编译二进制文件（`.whl` 轮子包）。
+  2. 传统机制下系统自动降级尝试本地编译源码，由于 Windows 环境缺乏 C++ 编译环境而直接崩溃。
+* **解决策略：** 顶住压力不下载几 GB 的庞大编译工具，采取职业程序员的“强制免编译路径”。在激活的 `(venv)` 虚拟环境下，顺序执行以下三剑客命令：
+
+![依赖强杀与启动命令](image-15.png)
+![关系型数据库落盘效果](image-16.png)
+
+```bash
+# 1. 强刷升级 pip 工具链至最新版本
+python -m pip install --upgrade pip -i [https://pypi.tuna.tsinghua.edu.cn/simple](https://pypi.tuna.tsinghua.edu.cn/simple)
+# 2. 绕过本地编译，强制指定下载全现成二进制包
+pip install greenlet --only-binary=:all: -i [https://pypi.tuna.tsinghua.edu.cn/simple](https://pypi.tuna.tsinghua.edu.cn/simple)
+# 3. 顺畅安装核心 ORM 框架
+pip install flask-sqlalchemy -i [https://pypi.tuna.tsinghua.edu.cn/simple](https://pypi.tuna.tsinghua.edu.cn/simple)

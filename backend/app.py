@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from flask_sqlalchemy import SQLAlchemy
 import time
 import json
 import os
@@ -7,34 +8,55 @@ import os
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "http://localhost:3000"}})
 
-HISTORY_FILE = 'history.json'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-def get_default_history():
-    return [
-        {
-            'id': 1,
-            'user_id': 'user1',
-            'role': 'assistant',
-            'content': '你好！我是你的AI学习助手，很高兴为你服务！请问有什么我可以帮助你的吗？',
-            'timestamp': 1620000000
+db = SQLAlchemy(app)
+
+class ChatHistory(db.Model):
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.String(50), nullable=False)
+    role = db.Column(db.String(20), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    timestamp = db.Column(db.Integer, nullable=False)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'role': self.role,
+            'content': self.content,
+            'timestamp': self.timestamp
         }
-    ]
 
-def load_history():
+def migrate_from_json():
+    HISTORY_FILE = 'history.json'
     if os.path.exists(HISTORY_FILE):
         try:
             with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except:
-            return get_default_history()
-    else:
-        history = get_default_history()
-        save_history(history)
-        return history
-
-def save_history(history):
-    with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
-        json.dump(history, f, ensure_ascii=False, indent=2)
+                history_data = json.load(f)
+            
+            for item in history_data:
+                existing = ChatHistory.query.filter_by(
+                    user_id=item['user_id'],
+                    role=item['role'],
+                    content=item['content'],
+                    timestamp=item['timestamp']
+                ).first()
+                if not existing:
+                    chat = ChatHistory(
+                        user_id=item['user_id'],
+                        role=item['role'],
+                        content=item['content'],
+                        timestamp=item['timestamp']
+                    )
+                    db.session.add(chat)
+            
+            db.session.commit()
+            os.remove(HISTORY_FILE)
+            print("数据迁移完成，已删除旧的 history.json 文件")
+        except Exception as e:
+            print(f"数据迁移失败: {e}")
 
 def generate_ai_response(message):
     responses = {
@@ -60,31 +82,25 @@ def chat():
     message = data.get('message', '')
     user_id = data.get('user_id', 'user1')
     
-    history = load_history()
-    
-    new_id = max(item['id'] for item in history) + 1 if history else 1
-    
-    user_message = {
-        'id': new_id,
-        'user_id': user_id,
-        'role': 'user',
-        'content': message,
-        'timestamp': int(time.time())
-    }
-    history.append(user_message)
+    user_message = ChatHistory(
+        user_id=user_id,
+        role='user',
+        content=message,
+        timestamp=int(time.time())
+    )
+    db.session.add(user_message)
     
     ai_response = generate_ai_response(message)
     
-    assistant_message = {
-        'id': new_id + 1,
-        'user_id': user_id,
-        'role': 'assistant',
-        'content': ai_response,
-        'timestamp': int(time.time())
-    }
-    history.append(assistant_message)
+    assistant_message = ChatHistory(
+        user_id=user_id,
+        role='assistant',
+        content=ai_response,
+        timestamp=int(time.time())
+    )
+    db.session.add(assistant_message)
     
-    save_history(history)
+    db.session.commit()
     
     return jsonify({
         'success': True,
@@ -94,13 +110,27 @@ def chat():
 @app.route('/api/history', methods=['GET'])
 def get_history():
     user_id = request.args.get('user_id', 'user1')
-    history = load_history()
-    user_history = [item for item in history if item['user_id'] == user_id]
+    history = ChatHistory.query.filter_by(user_id=user_id).order_by(ChatHistory.timestamp.asc()).all()
+    user_history = [item.to_dict() for item in history]
+    
+    if not user_history:
+        welcome_message = ChatHistory(
+            user_id=user_id,
+            role='assistant',
+            content='你好！我是你的AI学习助手，很高兴为你服务！请问有什么我可以帮助你的吗？',
+            timestamp=1620000000
+        )
+        db.session.add(welcome_message)
+        db.session.commit()
+        user_history = [welcome_message.to_dict()]
+    
     return jsonify({
         'success': True,
         'history': user_history
     })
 
 if __name__ == '__main__':
-    load_history()
+    with app.app_context():
+        db.create_all()
+        migrate_from_json()
     app.run(debug=True, host='0.0.0.0', port=5000)
