@@ -9,6 +9,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isWaiting, setIsWaiting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 滚动到底部的辅助函数
@@ -50,9 +51,62 @@ export default function ChatPage() {
       });
 
       if (!response.ok) throw new Error('网络请求失败');
-      
-      const data = await response.json();
-      setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
+
+      setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+      setIsWaiting(true);
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let firstChunk = true;
+
+      while (reader) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const messagesList = buffer.split('\n\n');
+        
+        for (let i = 0; i < messagesList.length - 1; i++) {
+          const msg = messagesList[i];
+          if (msg.startsWith('data: ')) {
+            const jsonStr = msg.substring(6);
+            try {
+              const data = JSON.parse(jsonStr);
+              const chunk = data.chunk;
+              
+              if (chunk === '[END]') {
+                break;
+              }
+
+              if (firstChunk) {
+                setIsWaiting(false);
+                firstChunk = false;
+              }
+
+              setMessages(prev => {
+                const newMessages = [...prev];
+                const lastMsg = newMessages[newMessages.length - 1];
+                if (lastMsg && lastMsg.role === 'assistant') {
+                  newMessages[newMessages.length - 1] = {
+                    ...lastMsg,
+                    content: lastMsg.content + chunk,
+                  };
+                }
+                return newMessages;
+              });
+            } catch (e) {
+              console.error('Error parsing SSE data:', e);
+            }
+          }
+        }
+        
+        buffer = messagesList[messagesList.length - 1];
+        
+        if (messagesList.some(m => m.includes('[END]'))) {
+          break;
+        }
+      }
     } catch (error) {
       console.error("Error calling chat API:", error);
       setMessages(prev => [...prev, { role: 'assistant', content: '抱歉，服务器开小差了，请稍后再试。' }]);
@@ -168,7 +222,7 @@ export default function ChatPage() {
               </div>
             </div>
           ))}
-          {isLoading && (
+          {isWaiting && (
             <div className="flex justify-start">
               <div className="max-w-[80%] rounded-2xl px-5 py-3.5 backdrop-blur-md bg-white/5 border border-white/10 flex items-center space-x-2">
                 <div className="w-2 h-2 bg-cyan-500 rounded-full animate-bounce"></div>

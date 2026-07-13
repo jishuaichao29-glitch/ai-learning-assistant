@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response, stream_with_context
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 import time
@@ -104,48 +104,52 @@ def generate_ai_response(message):
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    try:
-        data = request.get_json()
-        message = data.get('message', '')
+    data = request.get_json()
+    message = data.get('message', '')
+    
+    default_user = User.query.filter_by(username=DEFAULT_USERNAME).first()
+    if not default_user:
+        default_user = User(username=DEFAULT_USERNAME)
+        db.session.add(default_user)
+        db.session.commit()
+        print(f"已创建默认用户: id={default_user.id}, username={default_user.username}")
+    
+    print(f"使用默认用户: id={default_user.id}, username={default_user.username}")
+    
+    ai_response = generate_ai_response(message)
+    
+    def generate():
+        full_response = ""
+        for char in ai_response:
+            full_response += char
+            chunk_data = json.dumps({'chunk': char})
+            yield f"data: {chunk_data}\n\n"
+            time.sleep(0.05)
         
-        default_user = User.query.filter_by(username=DEFAULT_USERNAME).first()
-        if not default_user:
-            default_user = User(username=DEFAULT_USERNAME)
-            db.session.add(default_user)
-            db.session.commit()
-            print(f"已创建默认用户: id={default_user.id}, username={default_user.username}")
+        chunk_data = json.dumps({'chunk': '[END]'})
+        yield f"data: {chunk_data}\n\n"
         
-        print(f"使用默认用户: id={default_user.id}, username={default_user.username}")
+        current_time = int(time.time())
         
         user_message = ChatHistory(
             user_id=default_user.id,
             role='user',
             content=message,
-            timestamp=int(time.time())
+            timestamp=current_time - 1
         )
         db.session.add(user_message)
-        
-        ai_response = "这是一段测试代码：\n`http://googleusercontent.com/immersive_entry_chip/0`"
         
         assistant_message = ChatHistory(
             user_id=default_user.id,
             role='assistant',
             content=ai_response,
-            timestamp=int(time.time())
+            timestamp=current_time
         )
         db.session.add(assistant_message)
-        
         db.session.commit()
         print(f"消息已成功保存到数据库: user_id={default_user.id}")
-        
-        return jsonify({
-            'success': True,
-            'response': ai_response
-        })
-    except Exception as e:
-        db.session.rollback()
-        print(f"数据库提交失败: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+    
+    return Response(stream_with_context(generate()), content_type='text/event-stream')
 
 @app.route('/api/history', methods=['GET'])
 def get_history():
@@ -271,4 +275,4 @@ if __name__ == '__main__':
         db.create_all()
         get_default_user()
         migrate_from_json()
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, threaded=True, host='0.0.0.0', port=5000)
