@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useTheme } from '../ThemeProvider';
+import { useAuth } from '../AuthProvider';
+import ProtectedRoute from '../ProtectedRoute';
 
 interface TopicStat {
   name: string;
@@ -20,9 +22,12 @@ export default function ProfileDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { theme } = useTheme();
+  const { token } = useAuth();
 
   useEffect(() => {
-    fetch('http://127.0.0.1:5000/api/stats')
+    fetch('http://127.0.0.1:5000/api/stats', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
       .then((res) => {
         if (!res.ok) {
           throw new Error('未能成功连接到后端数据引擎');
@@ -37,7 +42,7 @@ export default function ProfileDashboard() {
         setError(err.message || '数据加载失败');
         setLoading(false);
       });
-  }, []);
+  }, [token]);
 
   const totalTopicCount = data?.topic_stats.reduce((sum, item) => sum + item.value, 0) || 1;
 
@@ -82,9 +87,10 @@ export default function ProfileDashboard() {
   }
 
   return (
-    <div className={`min-h-screen relative overflow-hidden font-sans ${
-      theme === 'dark' ? 'bg-neutral-950 text-neutral-100' : 'bg-gray-50 text-gray-900'
-    }`}>
+    <ProtectedRoute>
+      <div className={`min-h-screen relative overflow-hidden font-sans ${
+        theme === 'dark' ? 'bg-neutral-950 text-neutral-100' : 'bg-gray-50 text-gray-900'
+      }`}>
       <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] dark:bg-purple-900/20 bg-purple-200/30 rounded-full blur-[120px] pointer-events-none"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] dark:bg-cyan-900/20 bg-cyan-200/30 rounded-full blur-[120px] pointer-events-none"></div>
 
@@ -229,5 +235,6 @@ export default function ProfileDashboard() {
         </footer>
       </main>
     </div>
+    </ProtectedRoute>
   );
 }

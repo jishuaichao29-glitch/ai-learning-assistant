@@ -5,6 +5,8 @@ import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTheme } from '../ThemeProvider';
+import { useAuth } from '../AuthProvider';
+import ProtectedRoute from '../ProtectedRoute';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -27,6 +29,7 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const currentSessionIdRef = useRef<string>('');
   const { theme, toggleTheme } = useTheme();
+  const { token, logout } = useAuth();
 
   useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
@@ -40,9 +43,16 @@ export default function ChatPage() {
     scrollToBottom();
   }, [messages]);
 
+  const authHeaders = {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  };
+
   const fetchSessions = useCallback(async () => {
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/sessions');
+      const response = await fetch('http://127.0.0.1:5000/api/sessions', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       const data = await response.json();
       if (data.sessions && data.sessions.length > 0) {
         setSessions(data.sessions);
@@ -53,7 +63,7 @@ export default function ChatPage() {
     } catch (err) {
       console.error("Error fetching sessions:", err);
     }
-  }, [currentSessionId]);
+  }, [currentSessionId, token]);
 
   useEffect(() => {
     fetchSessions();
@@ -61,7 +71,9 @@ export default function ChatPage() {
 
   const fetchHistory = async (sessionId: string) => {
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/history?session_id=${sessionId}`);
+      const response = await fetch(`http://127.0.0.1:5000/api/history?session_id=${sessionId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       const data = await response.json();
       if (data.history && data.history.length > 0) {
         setMessages(data.history);
@@ -83,7 +95,7 @@ export default function ChatPage() {
     try {
       const response = await fetch('http://127.0.0.1:5000/api/sessions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
       });
       const data = await response.json();
       if (data.session) {
@@ -104,6 +116,7 @@ export default function ChatPage() {
     try {
       const response = await fetch(`http://127.0.0.1:5000/api/sessions/${sessionId}`, {
         method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
       
@@ -139,7 +152,7 @@ export default function ChatPage() {
     try {
       const response = await fetch('http://127.0.0.1:5000/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
         body: JSON.stringify({ message: userMessage, session_id: currentSessionIdRef.current }),
       });
 
@@ -213,6 +226,7 @@ export default function ChatPage() {
       try {
         const response = await fetch(`http://127.0.0.1:5000/api/history?session_id=${currentSessionId}`, {
           method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
         });
         if (response.ok) {
           setMessages([{ role: 'assistant', content: '记忆已清空，我们重新开始吧！' }]);
@@ -270,7 +284,8 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex h-screen dark:bg-neutral-950 bg-gray-50 font-sans">
+    <ProtectedRoute>
+      <div className="flex h-screen dark:bg-neutral-950 bg-gray-50 font-sans">
       <aside className="w-72 backdrop-blur-md dark:bg-black/30 bg-white/80 dark:border-r border-gray-200 flex flex-col shrink-0">
         <div className="p-4 dark:border-b border-gray-200">
           <button
@@ -312,7 +327,7 @@ export default function ChatPage() {
           ))}
         </div>
         
-        <div className="p-4 dark:border-t border-gray-200">
+        <div className="p-4 dark:border-t border-gray-200 space-y-2">
           <button
             onClick={toggleTheme}
             className="w-full py-2 rounded-xl dark:bg-white/5 bg-gray-100 hover:dark:bg-white/10 hover:bg-gray-200 dark:border border-gray-200 transition-colors flex items-center justify-center space-x-2"
@@ -320,7 +335,14 @@ export default function ChatPage() {
             <span>{theme === 'dark' ? '☀️' : '🌙'}</span>
             <span className="text-xs dark:text-neutral-400 text-gray-600">{theme === 'dark' ? '亮色模式' : '深色模式'}</span>
           </button>
-          <div className="text-xs dark:text-neutral-500 text-gray-500 text-center mt-3">
+          <button
+            onClick={logout}
+            className="w-full py-2 rounded-xl dark:bg-red-900/20 bg-red-100 hover:dark:bg-red-900/30 hover:bg-red-200 dark:border border-red-500/30 border-red-300 text-red-600 transition-colors flex items-center justify-center space-x-2"
+          >
+            <span>🚪</span>
+            <span className="text-xs">退出登录</span>
+          </button>
+          <div className="text-xs dark:text-neutral-500 text-gray-500 text-center mt-1">
             {sessions.length} 个对话
           </div>
         </div>
@@ -413,5 +435,6 @@ export default function ChatPage() {
         </footer>
       </main>
     </div>
+    </ProtectedRoute>
   );
 }

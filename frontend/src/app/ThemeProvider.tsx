@@ -13,6 +13,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   const toggleTheme = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    
     setTheme((prev) => {
       const newTheme = prev === "dark" ? "light" : "dark";
       localStorage.setItem("theme", newTheme);
@@ -26,6 +28,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     const savedTheme = localStorage.getItem("theme") as "dark" | "light" | null;
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     const initialTheme = savedTheme || (prefersDark ? "dark" : "dark");
