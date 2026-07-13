@@ -129,6 +129,66 @@ def get_history():
         'history': user_history
     })
 
+@app.route('/api/stats', methods=['GET'])
+def get_stats():
+    total_chats = ChatHistory.query.filter_by(role='user').count()
+    
+    assistant_messages = ChatHistory.query.filter_by(role='assistant').all()
+    ai_words = sum(len(msg.content) for msg in assistant_messages)
+    
+    user_messages = ChatHistory.query.filter_by(role='user').all()
+    
+    topic_counts = {
+        '编程技术': 0,
+        '数理逻辑': 0,
+        '语言学习': 0,
+        '综合通识': 0
+    }
+    
+    programming_keywords = ['编程', '代码', 'python', '写个']
+    math_keywords = ['数学', '计算', '算术', '公式']
+    language_keywords = ['英语', '单词', '翻译', '口语']
+    
+    for msg in user_messages:
+        content = msg.content.lower()
+        classified = False
+        
+        for kw in programming_keywords:
+            if kw in content:
+                topic_counts['编程技术'] += 1
+                classified = True
+                break
+        
+        if not classified:
+            for kw in math_keywords:
+                if kw in content:
+                    topic_counts['数理逻辑'] += 1
+                    classified = True
+                    break
+        
+        if not classified:
+            for kw in language_keywords:
+                if kw in content:
+                    topic_counts['语言学习'] += 1
+                    classified = True
+                    break
+        
+        if not classified:
+            topic_counts['综合通识'] += 1
+    
+    topic_stats = [
+        {'name': '编程技术', 'value': topic_counts['编程技术']},
+        {'name': '数理逻辑', 'value': topic_counts['数理逻辑']},
+        {'name': '语言学习', 'value': topic_counts['语言学习']},
+        {'name': '综合通识', 'value': topic_counts['综合通识']}
+    ]
+    
+    return jsonify({
+        'total_chats': total_chats,
+        'ai_words': ai_words,
+        'topic_stats': topic_stats
+    })
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()

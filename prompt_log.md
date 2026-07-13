@@ -83,10 +83,40 @@
 ![依赖强杀与启动命令](image-15.png)
 ![关系型数据库落盘效果](image-16.png)
 
-```bash
-# 1. 强刷升级 pip 工具链至最新版本
-python -m pip install --upgrade pip -i [https://pypi.tuna.tsinghua.edu.cn/simple](https://pypi.tuna.tsinghua.edu.cn/simple)
-# 2. 绕过本地编译，强制指定下载全现成二进制包
-pip install greenlet --only-binary=:all: -i [https://pypi.tuna.tsinghua.edu.cn/simple](https://pypi.tuna.tsinghua.edu.cn/simple)
-# 3. 顺畅安装核心 ORM 框架
-pip install flask-sqlalchemy -i [https://pypi.tuna.tsinghua.edu.cn/simple](https://pypi.tuna.tsinghua.edu.cn/simple)
+
+
+
+📅 Day 3：核心看板数据挖掘与第三独立路由总攻
+
+### 1. 后端智能统计接口开发（第 3 个核心 API）
+* **原始 Prompt：** > “请完全接管后端开发，在 `backend/app.py` 中新增第 3 个核心 API 接口 `/api/stats` (GET)。
+  > 
+  > **具体要求如下：**
+  > 1. **数据库真实统计**：使用 SQLAlchemy 语法查询 `ChatHistory` 表，提取以下真实数据：
+  >    * `total_chats`：用户累计提问的总次数（即统计 `role='user'` 的记录总数）。
+  >    * `ai_words`：AI 助手累计回复的总字数（查询所有 `role='assistant'` 的 `content` 字段的字符长度总和）。
+  >    * `topic_stats`：学习主题分布统计。通过对 `content` 字段进行轻量级模糊匹配分类：
+  >      - 包含 '编程'、'代码'、'python'、'写个' 归为 **“编程技术”**
+  >      - 包含 '数学'、'计算'、'算术'、'公式' 归为 **“数理逻辑”**
+  >      - 包含 '英语'、'单词'、'翻译'、'口语' 归为 **“语言学习”**
+  >      - 其余无法识别的记录统一归为 **“综合通识”**
+  >      统计这四个分类各自出现的总次数。
+  > 2. **返回标准 JSON**：格式必须严格规范，结构如下：
+  >    ```json
+  >    {
+  >      "total_chats": 12,
+  >      "ai_words": 2450,
+  >      "topic_stats": [
+  >        { "name": "编程技术", "value": 5 },
+  >        { "name": "数理逻辑", "value": 2 },
+  >        { "name": "语言学习", "value": 3 },
+  >        { "name": "综合通识", "value": 2 }
+  >      ]
+  >    }
+  >    ```
+  > 3. **保持系统兼容**：确保 `flask_cors` 跨域依然对该新接口生效。
+  > 
+  > 修改完成后请自动运行并保持后端 Flask 服务启动，谢谢！”
+* **功能标注：** 在 `backend/app.py` 中新增 `/api/stats` 路由。利用 SQLAlchemy 对 SQLite 关系型数据库进行深度数据挖掘，实时聚合用户总提问数、AI总回复字数，并通过文本模糊匹配完成“学习主题分布”的分类统计。
+* **调试与验证：** 后端新接口成功上线且未破坏原有逻辑。在浏览器直接请求 `http://127.0.0.1:5000/api/stats`，完美呈现出结构化的真实 JSON 统计流水。
+* **过程记录：** ![后端Stats接口生成与运行成功](image-17.png) 与 ![浏览器Stats接口Json回显成功](image-18.png)
