@@ -1,149 +1,211 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 【核心功能 1】页面一加载，立马去 Flask 后端下载以前的历史记录
+  // 滚动到底部的辅助函数
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   useEffect(() => {
-    fetch('http://localhost:5000/api/history?user_id=user1')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.history) {
+    scrollToBottom();
+  }, [messages]);
+
+  // 获取历史记录
+  useEffect(() => {
+    fetch('http://127.0.0.1:5000/api/history')
+      .then(res => res.json())
+      .then(data => {
+        if(data.history && data.history.length > 0) {
           setMessages(data.history);
+        } else {
+          setMessages([{role: 'assistant', content: '你好！我是你的智能学习助手。有什么我可以帮你的吗？'}]);
         }
       })
-      .catch((err) => console.error('获取历史记录失败:', err));
+      .catch(err => console.error("Error fetching history:", err));
   }, []);
 
-  // 【核心功能 2】点击发送，实时将问题提交给 Flask，并拿回真正的 AI 回答
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || loading) return;
+  const handleSend = async () => {
+    if (!input.trim() || isLoading) return;
 
-    const userText = input;
+    const userMessage = input.trim();
     setInput('');
-    setLoading(true);
-
-    // 1. 先在前端屏幕上蹦出用户的聊天气泡
-    const userMsg = { id: Date.now(), role: 'user', content: userText };
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setIsLoading(true);
 
     try {
-      // 2. 使用 fetch 异步请求 Flask 的后端接口
-      const response = await fetch('http://localhost:5000/api/chat', {
+      const response = await fetch('http://127.0.0.1:5000/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userText, user_id: 'user1' }),
+        body: JSON.stringify({ message: userMessage }),
       });
 
+      if (!response.ok) throw new Error('网络请求失败');
+      
       const data = await response.json();
-
-      // 3. 将后端返回的真实 AI 答复刷到屏幕上
-      const aiMsg = { id: Date.now() + 1, role: 'assistant', content: data.response };
-      setMessages((prev) => [...prev, aiMsg]);
+      setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
     } catch (error) {
-      console.error('通信失败:', error);
-      setMessages((prev) => [
-        ...prev,
-        { id: Date.now() + 1, role: 'assistant', content: '❌ 哎呀，网络开小差了，请检查后端服务是否开启。' }
-      ]);
+      console.error("Error calling chat API:", error);
+      setMessages(prev => [...prev, { role: 'assistant', content: '抱歉，服务器开小差了，请稍后再试。' }]);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
+  const handleClearHistory = async () => {
+    if (confirm('确定要清空所有对话记忆吗？此操作不可恢复。')) {
+      try {
+        const response = await fetch('http://127.0.0.1:5000/api/history', {
+          method: 'DELETE',
+        });
+        if (response.ok) {
+          setMessages([{ role: 'assistant', content: '记忆已清空，我们重新开始吧！' }]);
+        } else {
+          alert('清空失败，请稍后重试。');
+        }
+      } catch (error) {
+        console.error('Error clearing history:', error);
+        alert('清空失败，请检查网络连接。');
+      }
+    }
+  };
+
+  const markdownComponents = {
+    p: ({ children }: { children: React.ReactNode }) => (
+      <p className="mb-2 last:mb-0">{children}</p>
+    ),
+    strong: ({ children }: { children: React.ReactNode }) => (
+      <strong className="font-semibold text-cyan-400">{children}</strong>
+    ),
+    ul: ({ children }: { children: React.ReactNode }) => (
+      <ul className="list-disc list-inside mb-2 last:mb-0 space-y-1">
+        {children}
+      </ul>
+    ),
+    ol: ({ children }: { children: React.ReactNode }) => (
+      <ol className="list-decimal list-inside mb-2 last:mb-0 space-y-1">
+        {children}
+      </ol>
+    ),
+    li: ({ children }: { children: React.ReactNode }) => (
+      <li className="text-sm">{children}</li>
+    ),
+    code: ({ className, children }: { className?: string; children: React.ReactNode }) => {
+      const match = className?.match(/language-(\w+)/);
+      if (match) {
+        return (
+          <pre className="bg-neutral-900/80 rounded-lg p-3 text-xs font-mono overflow-x-auto mb-2 last:mb-0 border border-white/10">
+            <code className="text-neutral-300">{String(children).replace(/\n$/, '')}</code>
+          </pre>
+        );
+      }
+      return (
+        <code className="px-1.5 py-0.5 rounded bg-white/10 text-cyan-300 text-sm font-mono">
+          {children}
+        </code>
+      );
+    },
+  };
+
   return (
-    <div className="flex h-screen bg-black text-gray-200 font-sans">
-      {/* 左侧历史记录侧边栏 */}
-      <aside className="w-64 border-r border-gray-900 bg-gray-950 flex flex-col justify-between hidden md:flex">
-        <div>
-          <div className="p-4 border-b border-gray-900 flex justify-between items-center">
-            <Link href="/" className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-teal-400">
-              🏠 AI.Study
-            </Link>
-          </div>
-          <div className="p-3">
-            <button className="w-full py-2 px-4 rounded-xl border border-gray-800 hover:border-blue-500/50 hover:bg-blue-500/10 transition text-sm text-left flex items-center gap-2">
-              <span>+</span> 新建对话
-            </button>
-          </div>
-          <nav className="px-3 space-y-1 overflow-y-auto max-h-[60vh]">
-            <div className="p-3 rounded-xl bg-gray-900 text-sm text-white font-medium cursor-pointer truncate">
-              💬 智能学习助手已就绪
-            </div>
-          </nav>
+    <div className="flex flex-col h-screen bg-neutral-950 text-white font-sans">
+      {/* 修改后的顶部导航栏：加入两个跳转按钮 */}
+      <header className="flex justify-between items-center px-6 py-4 backdrop-blur-md bg-black/50 border-b border-white/10 z-10 sticky top-0">
+        <div className="flex items-center space-x-3">
+          <div className="h-3 w-3 rounded-full bg-cyan-400 animate-pulse"></div>
+          <h1 className="text-lg font-medium tracking-wide">AI Chat Room</h1>
         </div>
-        <div className="p-4 border-t border-gray-900 text-xs text-gray-600">
-          📅 考勤系统已绑定双端逻辑
+        
+        {/* 新增的导航按钮组 */}
+        <div className="flex space-x-4">
+          <Link href="/" className="px-4 py-2 rounded-xl text-xs font-medium backdrop-blur-md bg-white/5 hover:bg-white/10 border border-white/10 transition-colors flex items-center space-x-2">
+            <span>🏠</span>
+            <span className="hidden sm:inline">返回首页</span>
+          </Link>
+          <Link href="/profile" className="px-4 py-2 rounded-xl text-xs font-medium backdrop-blur-md bg-cyan-900/20 hover:bg-cyan-900/40 border border-cyan-500/20 text-cyan-400 transition-colors flex items-center space-x-2">
+            <span>🌌</span>
+            <span className="hidden sm:inline">科技数据看板</span>
+          </Link>
+          <button
+            onClick={handleClearHistory}
+            className="px-4 py-2 rounded-xl text-xs font-medium backdrop-blur-md bg-red-900/20 hover:bg-red-900/40 border border-red-500/30 text-red-400 transition-colors flex items-center space-x-2"
+          >
+            <span>🗑️</span>
+            <span className="hidden sm:inline">清空记忆</span>
+          </button>
         </div>
-      </aside>
+      </header>
 
-      {/* 右侧主聊天区域 */}
-      <main className="flex-grow flex flex-col justify-between bg-gradient-to-b from-gray-950 to-black">
-        {/* 顶部状态栏 */}
-        <header className="px-6 py-4 border-b border-gray-900 backdrop-blur-md bg-black/50 flex justify-between items-center">
-          <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-            与 Flask 真实数据联调大厅
-          </h2>
-        </header>
-
-        {/* 聊天气泡滚动区 */}
-        <div className="flex-grow overflow-y-auto p-6 space-y-6 max-w-4xl mx-auto w-full">
-          {messages.map((msg, index) => (
-            <div
-              key={index}
-              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-[75%] rounded-2xl p-4 text-sm leading-relaxed ${
-                  msg.role === 'user'
-                    ? 'bg-blue-600 text-white rounded-br-none shadow-lg shadow-blue-600/10'
-                    : 'bg-gray-900 text-gray-200 rounded-bl-none border border-gray-800'
-                }`}
-              >
-                <div className="text-xs text-gray-400 mb-1 font-semibold">
-                  {msg.role === 'user' ? 'You' : 'AI Assistant'}
-                </div>
-                {msg.content}
+      {/* 聊天消息区域 */}
+      <main className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+        <div className="max-w-4xl mx-auto space-y-6">
+          {messages.map((msg, idx) => (
+            <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[80%] rounded-2xl px-5 py-3.5 text-sm sm:text-base leading-relaxed ${
+                msg.role === 'user' 
+                  ? 'bg-gradient-to-br from-cyan-600 to-blue-600 text-white shadow-lg' 
+                  : 'backdrop-blur-md bg-white/5 border border-white/10 text-neutral-200'
+              }`}>
+                {msg.role === 'user' ? (
+                  <span className="whitespace-pre-wrap">{msg.content}</span>
+                ) : (
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={markdownComponents}
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
+                )}
               </div>
             </div>
           ))}
-          {loading && (
+          {isLoading && (
             <div className="flex justify-start">
-              <div className="bg-gray-900 text-gray-400 rounded-2xl p-4 text-sm animate-pulse">
-                AI正在思考中...
+              <div className="max-w-[80%] rounded-2xl px-5 py-3.5 backdrop-blur-md bg-white/5 border border-white/10 flex items-center space-x-2">
+                <div className="w-2 h-2 bg-cyan-500 rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-cyan-500 rounded-full animate-bounce delay-75"></div>
+                <div className="w-2 h-2 bg-cyan-500 rounded-full animate-bounce delay-150"></div>
               </div>
             </div>
           )}
+          <div ref={messagesEndRef} />
         </div>
-
-        {/* 底部输入框 */}
-        <footer className="p-6 border-t border-gray-900 bg-black max-w-4xl mx-auto w-full">
-          <form onSubmit={handleSend} className="relative flex items-center">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={loading ? "思考中..." : "可以输入关键词试一试，例如：编程、学习、数学..."}
-              disabled={loading}
-              className="w-full bg-gray-900 border border-gray-800 rounded-xl py-4 pl-4 pr-16 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition disabled:opacity-50"
-            />
-            <button
-              type="submit"
-              disabled={loading}
-              className="absolute right-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition disabled:opacity-50"
-            >
-              发送
-            </button>
-          </form>
-        </footer>
       </main>
+
+      {/* 底部输入框区域 */}
+      <footer className="p-4 sm:p-6 backdrop-blur-md bg-black/50 border-t border-white/10">
+        <div className="max-w-4xl mx-auto flex items-end space-x-3">
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+            placeholder="输入您的问题 (按 Enter 发送，Shift+Enter 换行)..."
+            className="flex-1 max-h-32 min-h-[50px] p-4 rounded-2xl bg-neutral-900/80 border border-white/10 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none resize-none text-sm transition-all"
+            rows={1}
+          />
+          <button
+            onClick={handleSend}
+            disabled={!input.trim() || isLoading}
+            className="h-[50px] px-6 rounded-2xl bg-cyan-600 hover:bg-cyan-500 disabled:bg-neutral-800 disabled:text-neutral-500 font-medium transition-colors flex items-center justify-center shrink-0"
+          >
+            发送 🚀
+          </button>
+        </div>
+      </footer>
     </div>
   );
 }

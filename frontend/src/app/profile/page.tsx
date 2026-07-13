@@ -76,6 +76,7 @@ export default function ProfileDashboard() {
       <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-cyan-900/20 rounded-full blur-[120px] pointer-events-none"></div>
 
       {/* 顶部精美导航栏 */}
+      {/* 顶部精美导航栏：修改后加入两个返回按钮 */}
       <header className="sticky top-0 z-50 backdrop-blur-md bg-black/40 border-b border-white/5 px-6 py-4 flex justify-between items-center">
         <div className="flex items-center space-x-3">
           <div className="h-3 w-3 rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 animate-pulse"></div>
@@ -83,12 +84,22 @@ export default function ProfileDashboard() {
             AI 学情自画像看板
           </h1>
         </div>
-        <Link 
-          href="/" 
-          className="px-4 py-1.5 rounded-full text-xs font-medium backdrop-blur-md bg-white/5 hover:bg-white/10 border border-white/10 transition flex items-center space-x-1"
-        >
-          <span>← 返回聊天室</span>
-        </Link>
+        
+        {/* 新增的按钮组 */}
+        <div className="flex space-x-3">
+          <Link 
+            href="/chat" 
+            className="px-4 py-1.5 rounded-full text-xs font-medium backdrop-blur-md bg-cyan-900/20 hover:bg-cyan-900/40 border border-cyan-500/30 transition flex items-center space-x-1 text-cyan-400"
+          >
+            <span>← 返回聊天室</span>
+          </Link>
+          <Link 
+            href="/" 
+            className="px-4 py-1.5 rounded-full text-xs font-medium backdrop-blur-md bg-white/5 hover:bg-white/10 border border-white/10 transition flex items-center space-x-1 text-neutral-300"
+          >
+            <span>🏠 返回首页</span>
+          </Link>
+        </div>
       </header>
 
       {/* 看板主体响应式 Grid 布局 */}
