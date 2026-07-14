@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../AuthProvider';
 import { useTheme } from '../ThemeProvider';
@@ -60,7 +61,18 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      <div className={`w-full max-w-md rounded-2xl backdrop-blur-md p-8 ${theme === 'dark' ? 'bg-black/40 border border-white/10' : 'bg-white/80 border border-gray-200 shadow-xl'}`}>
+      <div className={`w-full max-w-md rounded-2xl backdrop-blur-md p-8 relative ${theme === 'dark' ? 'bg-black/40 border border-white/10' : 'bg-white/80 border border-gray-200 shadow-xl'}`}>
+        <div className="flex items-center justify-center mb-6">
+          <Link
+            href="/"
+            className={`absolute left-6 top-6 text-sm transition-colors flex items-center space-x-1 ${
+              theme === 'dark' ? 'text-neutral-500 hover:text-neutral-300' : 'text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            <span>←</span>
+            <span>返回首页</span>
+          </Link>
+        </div>
         <div className="text-center mb-8">
           <div className={`text-5xl mb-4 ${theme === 'dark' ? 'text-cyan-400' : 'text-purple-600'}`}>🤖</div>
           <h1 className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>

@@ -1,10 +1,14 @@
-from flask import Flask, request, jsonify, Response, stream_with_context
+from flask import Flask, request, jsonify, Response, stream_with_context, g
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
 import time
 import json
 import os
 import uuid
+import base64
+import hashlib
+import hmac
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "http://localhost:3000"}})
@@ -13,6 +17,7 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 DATABASE_PATH = os.path.join(basedir, 'database.db')
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DATABASE_PATH}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SECRET_KEY'] = 'your-secret-key-change-in-production-2024'
 
 print(f"数据库连接路径: {DATABASE_PATH}")
 
@@ -21,12 +26,21 @@ db = SQLAlchemy(app)
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     username = db.Column(db.String(50), nullable=False, unique=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.Integer, nullable=False)
 
     def to_dict(self):
         return {
             'id': self.id,
-            'username': self.username
+            'username': self.username,
+            'created_at': self.created_at
         }
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
 
 class Session(db.Model):
     id = db.Column(db.String(36), primary_key=True)
@@ -59,46 +73,162 @@ class ChatHistory(db.Model):
             'timestamp': self.timestamp
         }
 
-DEFAULT_USERNAME = 'default_user'
+def base64url_encode(data):
+    if isinstance(data, str):
+        data = data.encode('utf-8')
+    encoded = base64.urlsafe_b64encode(data).decode('utf-8')
+    return encoded.rstrip('=')
 
-def get_default_user():
-    user = User.query.filter_by(username=DEFAULT_USERNAME).first()
-    if not user:
-        user = User(username=DEFAULT_USERNAME)
-        db.session.add(user)
-        db.session.commit()
-    return user
+def base64url_decode(data):
+    padding = 4 - (len(data) % 4)
+    data += '=' * padding
+    return base64.urlsafe_b64decode(data).decode('utf-8')
 
-def migrate_from_json():
-    HISTORY_FILE = 'history.json'
-    if os.path.exists(HISTORY_FILE):
+def generate_token(user_id):
+    header = json.dumps({'alg': 'HS256', 'typ': 'JWT'})
+    payload = json.dumps({'user_id': user_id, 'exp': time.time() + 24 * 60 * 60})
+    
+    encoded_header = base64url_encode(header)
+    encoded_payload = base64url_encode(payload)
+    
+    signing_input = f"{encoded_header}.{encoded_payload}"
+    signature = hmac.new(
+        app.config['SECRET_KEY'].encode('utf-8'),
+        signing_input.encode('utf-8'),
+        hashlib.sha256
+    ).digest()
+    encoded_signature = base64url_encode(signature)
+    
+    return f"{encoded_header}.{encoded_payload}.{encoded_signature}"
+
+def decode_token(token):
+    try:
+        parts = token.split('.')
+        if len(parts) != 3:
+            return None
+        
+        encoded_header, encoded_payload, encoded_signature = parts
+        
+        signing_input = f"{encoded_header}.{encoded_payload}"
+        expected_signature = hmac.new(
+            app.config['SECRET_KEY'].encode('utf-8'),
+            signing_input.encode('utf-8'),
+            hashlib.sha256
+        ).digest()
+        
+        if base64url_encode(expected_signature) != encoded_signature:
+            return None
+        
+        payload = json.loads(base64url_decode(encoded_payload))
+        return payload
+    
+    except Exception:
+        return None
+
+def login_required(f):
+    def decorated_function(*args, **kwargs):
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return jsonify({'success': False, 'error': '请先登录'}), 401
+        
         try:
-            with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-                history_data = json.load(f)
+            token = auth_header.split(' ')[1]
+            payload = decode_token(token)
             
-            default_user = get_default_user()
+            if not payload:
+                return jsonify({'success': False, 'error': '无效的Token'}), 401
             
-            for item in history_data:
-                existing = ChatHistory.query.filter_by(
-                    user_id=default_user.id,
-                    role=item['role'],
-                    content=item['content'],
-                    timestamp=item['timestamp']
-                ).first()
-                if not existing:
-                    chat = ChatHistory(
-                        user_id=default_user.id,
-                        role=item['role'],
-                        content=item['content'],
-                        timestamp=item['timestamp']
-                    )
-                    db.session.add(chat)
+            user_id = payload.get('user_id')
+            exp = payload.get('exp')
             
-            db.session.commit()
-            os.remove(HISTORY_FILE)
-            print("数据迁移完成，已删除旧的 history.json 文件")
+            if not user_id or (exp and time.time() > exp):
+                return jsonify({'success': False, 'error': 'Token已过期'}), 401
+            
+            user = User.query.get(user_id)
+            if not user:
+                return jsonify({'success': False, 'error': '用户不存在'}), 401
+            
+            g.user = user
+            g.user_id = user_id
+            
         except Exception as e:
-            print(f"数据迁移失败: {e}")
+            return jsonify({'success': False, 'error': f'认证失败: {str(e)}'}), 401
+        
+        return f(*args, **kwargs)
+    
+    decorated_function.__name__ = f.__name__
+    return decorated_function
+
+@app.route('/api/register', methods=['POST'])
+def register():
+    try:
+        data = request.get_json()
+        username = data.get('username', '').strip()
+        password = data.get('password', '')
+
+        if not username or not password:
+            return jsonify({'success': False, 'error': '用户名和密码不能为空'}), 400
+        
+        if len(username) < 3 or len(username) > 50:
+            return jsonify({'success': False, 'error': '用户名长度必须在3-50个字符之间'}), 400
+        
+        if len(password) < 6:
+            return jsonify({'success': False, 'error': '密码长度至少6个字符'}), 400
+
+        existing_user = User.query.filter_by(username=username).first()
+        if existing_user:
+            return jsonify({'success': False, 'error': '用户名已存在'}), 409
+
+        new_user = User(
+            username=username,
+            created_at=int(time.time())
+        )
+        new_user.set_password(password)
+        
+        db.session.add(new_user)
+        db.session.commit()
+
+        token = generate_token(new_user.id)
+        
+        return jsonify({
+            'success': True,
+            'user': new_user.to_dict(),
+            'token': token
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"注册失败: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    try:
+        data = request.get_json()
+        username = data.get('username', '').strip()
+        password = data.get('password', '')
+
+        if not username or not password:
+            return jsonify({'success': False, 'error': '用户名和密码不能为空'}), 400
+
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            return jsonify({'success': False, 'error': '用户名或密码错误'}), 401
+        
+        if not user.check_password(password):
+            return jsonify({'success': False, 'error': '用户名或密码错误'}), 401
+
+        token = generate_token(user.id)
+
+        return jsonify({
+            'success': True,
+            'user': user.to_dict(),
+            'token': token
+        })
+
+    except Exception as e:
+        print(f"登录失败: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 def generate_ai_response(message):
     responses = {
@@ -119,15 +249,10 @@ def generate_ai_response(message):
     return f'这是一个很好的问题！关于「{message}」，我可以为你提供一些学习建议。首先，你可以通过查阅相关资料来了解基础知识，然后通过实践来加深理解。如果有具体的问题，随时可以问我！'
 
 @app.route('/api/sessions', methods=['GET'])
+@login_required
 def get_sessions():
     try:
-        default_user = User.query.filter_by(username=DEFAULT_USERNAME).first()
-        if not default_user:
-            default_user = User(username=DEFAULT_USERNAME)
-            db.session.add(default_user)
-            db.session.commit()
-        
-        sessions = Session.query.filter_by(user_id=default_user.id).order_by(Session.created_at.desc()).all()
+        sessions = Session.query.filter_by(user_id=g.user_id).order_by(Session.created_at.desc()).all()
         return jsonify({
             'success': True,
             'sessions': [session.to_dict() for session in sessions]
@@ -137,20 +262,15 @@ def get_sessions():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/sessions', methods=['POST'])
+@login_required
 def create_session():
     try:
-        default_user = User.query.filter_by(username=DEFAULT_USERNAME).first()
-        if not default_user:
-            default_user = User(username=DEFAULT_USERNAME)
-            db.session.add(default_user)
-            db.session.commit()
-        
         session_id = str(uuid.uuid4())
         new_session = Session(
             id=session_id,
             title='新对话',
             created_at=int(time.time()),
-            user_id=default_user.id
+            user_id=g.user_id
         )
         db.session.add(new_session)
         db.session.commit()
@@ -165,17 +285,14 @@ def create_session():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/sessions/<session_id>', methods=['DELETE'])
+@login_required
 def delete_session(session_id):
     try:
-        default_user = User.query.filter_by(username=DEFAULT_USERNAME).first()
-        if not default_user:
-            return jsonify({'success': False, 'error': '用户不存在'}), 404
-        
-        session = Session.query.filter_by(id=session_id, user_id=default_user.id).first()
+        session = Session.query.filter_by(id=session_id, user_id=g.user_id).first()
         if not session:
             return jsonify({'success': False, 'error': '会话不存在'}), 404
         
-        ChatHistory.query.filter_by(session_id=session_id).delete()
+        ChatHistory.query.filter_by(session_id=session_id, user_id=g.user_id).delete()
         db.session.delete(session)
         db.session.commit()
         
@@ -187,6 +304,7 @@ def delete_session(session_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/chat', methods=['POST'])
+@login_required
 def chat():
     data = request.get_json()
     message = data.get('message', '')
@@ -194,15 +312,6 @@ def chat():
     
     if not session_id:
         return jsonify({'success': False, 'error': 'session_id is required'}), 400
-    
-    default_user = User.query.filter_by(username=DEFAULT_USERNAME).first()
-    if not default_user:
-        default_user = User(username=DEFAULT_USERNAME)
-        db.session.add(default_user)
-        db.session.commit()
-        print(f"已创建默认用户: id={default_user.id}, username={default_user.username}")
-    
-    print(f"使用默认用户: id={default_user.id}, username={default_user.username}, session_id={session_id}")
     
     ai_response = generate_ai_response(message)
     
@@ -218,7 +327,7 @@ def chat():
         
         try:
             user_message = ChatHistory(
-                user_id=default_user.id,
+                user_id=g.user_id,
                 session_id=session_id,
                 role='user',
                 content=message,
@@ -227,7 +336,7 @@ def chat():
             db.session.add(user_message)
             
             assistant_message = ChatHistory(
-                user_id=default_user.id,
+                user_id=g.user_id,
                 session_id=session_id,
                 role='assistant',
                 content=ai_response,
@@ -235,7 +344,7 @@ def chat():
             )
             db.session.add(assistant_message)
             db.session.commit()
-            print(f"消息已成功保存到数据库: user_id={default_user.id}, session_id={session_id}")
+            print(f"消息已成功保存到数据库: user_id={g.user_id}, session_id={session_id}")
         except Exception as e:
             db.session.rollback()
             print(f"保存消息到数据库失败: {e}")
@@ -247,6 +356,7 @@ def chat():
     return Response(stream_with_context(generate()), content_type='text/event-stream')
 
 @app.route('/api/history', methods=['GET'])
+@login_required
 def get_history():
     try:
         session_id = request.args.get('session_id', '')
@@ -254,21 +364,15 @@ def get_history():
         if not session_id:
             return jsonify({'success': False, 'error': 'session_id is required'}), 400
         
-        default_user = User.query.filter_by(username=DEFAULT_USERNAME).first()
-        if not default_user:
-            default_user = User(username=DEFAULT_USERNAME)
-            db.session.add(default_user)
-            db.session.commit()
-        
         history = ChatHistory.query.filter_by(
-            user_id=default_user.id,
+            user_id=g.user_id,
             session_id=session_id
         ).order_by(ChatHistory.timestamp.asc()).all()
         user_history = [item.to_dict() for item in history]
         
         if not user_history:
             welcome_message = ChatHistory(
-                user_id=default_user.id,
+                user_id=g.user_id,
                 session_id=session_id,
                 role='assistant',
                 content='你好！我是你的AI学习助手，很高兴为你服务！请问有什么我可以帮助你的吗？',
@@ -288,20 +392,15 @@ def get_history():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/history', methods=['DELETE'])
+@login_required
 def delete_history():
     try:
         session_id = request.args.get('session_id', '')
         
-        default_user = User.query.filter_by(username=DEFAULT_USERNAME).first()
-        if not default_user:
-            default_user = User(username=DEFAULT_USERNAME)
-            db.session.add(default_user)
-            db.session.commit()
-        
         if session_id:
-            ChatHistory.query.filter_by(user_id=default_user.id, session_id=session_id).delete()
+            ChatHistory.query.filter_by(user_id=g.user_id, session_id=session_id).delete()
         else:
-            ChatHistory.query.filter_by(user_id=default_user.id).delete()
+            ChatHistory.query.filter_by(user_id=g.user_id).delete()
         
         db.session.commit()
         return jsonify({'status': 'success'})
@@ -311,20 +410,15 @@ def delete_history():
         return jsonify({'status': 'error', 'error': str(e)}), 500
 
 @app.route('/api/stats', methods=['GET'])
+@login_required
 def get_stats():
     try:
-        default_user = User.query.filter_by(username=DEFAULT_USERNAME).first()
-        if not default_user:
-            default_user = User(username=DEFAULT_USERNAME)
-            db.session.add(default_user)
-            db.session.commit()
+        total_chats = ChatHistory.query.filter_by(user_id=g.user_id, role='user').count()
         
-        total_chats = ChatHistory.query.filter_by(user_id=default_user.id, role='user').count()
-        
-        assistant_messages = ChatHistory.query.filter_by(user_id=default_user.id, role='assistant').all()
+        assistant_messages = ChatHistory.query.filter_by(user_id=g.user_id, role='assistant').all()
         ai_words = sum(len(msg.content) for msg in assistant_messages)
         
-        user_messages = ChatHistory.query.filter_by(user_id=default_user.id, role='user').all()
+        user_messages = ChatHistory.query.filter_by(user_id=g.user_id, role='user').all()
         
         topic_counts = {
             '编程技术': 0,
@@ -380,32 +474,7 @@ def get_stats():
         print(f"获取统计数据失败: {e}")
         return jsonify({'total_chats': 0, 'ai_words': 0, 'topic_stats': []})
 
-def migrate_old_data():
-    default_user = get_default_user()
-    
-    existing_session = Session.query.filter_by(user_id=default_user.id).first()
-    if not existing_session:
-        default_session_id = str(uuid.uuid4())
-        default_session = Session(
-            id=default_session_id,
-            title='默认对话',
-            created_at=int(time.time()),
-            user_id=default_user.id
-        )
-        db.session.add(default_session)
-        db.session.commit()
-        print(f"已创建默认会话: id={default_session_id}")
-        
-        old_records = ChatHistory.query.filter_by(user_id=default_user.id).all()
-        for record in old_records:
-            record.session_id = default_session_id
-        db.session.commit()
-        print(f"已迁移 {len(old_records)} 条历史记录到默认会话")
-
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-        get_default_user()
-        migrate_old_data()
-        migrate_from_json()
     app.run(debug=True, threaded=True, host='0.0.0.0', port=5000)

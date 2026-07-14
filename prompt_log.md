@@ -265,5 +265,63 @@ pip install flask-sqlalchemy -i https://pypi.tuna.tsinghua.edu.cn/simple
   * 彻底理顺了前端 React 状态机与后端组件生命周期的通信管道，通过强绑定最新上下文状态，解决了流式输出末端的外键丢失 Bug，实现了完全的“数据闭环”。
 * **联调结果：** 多会话新建、无缝切换、级联删除功能响应时间均达到毫秒级。经过“清除数据库残余脏数据并重测”的严格考量，前端气泡与底层 SQLite 表记录实现 100% 的精准映射，系统鲁棒性大幅提升！
 
+---
+
+## 前端视觉升级：全局双色主题模式切换与架构优化
+
+### 1. 基于 Tailwind 类名机制的全局响应式主题架构
+* **对应功能与修改文件：** 在系统顶层引入全局 Light / Dark 主题一键切换功能，丰富 UI 交互细节，大幅提升系统的前端展现力与视觉用户体验。主要重构文件：`tailwind.config.ts`（或 `tailwind.config.js`）、前端侧边栏或导航组件。
+* **面临的技术挑战：** 1. **配置级联生效**：需要更改 Tailwind 的底层编译模式，将其从系统媒体查询（Media Queries）驱动升级为显式类名（Class）驱动，确保 `dark:` 前缀在顶层节点拥有最高优先级。
+  2. **跨生命周期持久化**：动态主题切换在页面刷新后容易回弹。必须在客户端挂载的第一时间拦截并读取 `localStorage` 缓存，动态操作 `document.documentElement` 的类名列表，避免出现瞬间闪烁的“不良白屏”现象。
+* **原始 Prompt（全局主题切换重构指令）：**
+  > “请接管前端开发，帮我为项目实现全局的‘主题模式切换 (Dark / Light Mode)’功能。请严格按照以下工程规范进行重构：
+  > 第一步：配置核查，显式启用原生类名暗黑模式支持 `darkMode: 'class'`。
+  > 第二步：建立全局主题管理机制，初始从 localStorage 中读取，若无则默认为 'dark'。状态改变时动态操作 `document.documentElement.classList` 增删 'dark' 类名，并实时写回本地缓存。
+  > 第三步：在侧边栏或右上角添加精致的太阳/月亮切换按钮。系统性重构组件背景与文字颜色，利用 `dark:bg-gray-900 bg-white` 等双向适配语法，确保两套主题下聊天气泡、代码块均具备极高视认性与审美观感。”
+
+---
+
+### 2. 解耦服务端与客户端组件，修复元数据（Metadata）导出冲突
+* **对应功能与修改文件：** 解决在全局注入主题控制流时引发的 Next.js 框架级编译错误。主要重构与新增文件：`frontend/src/app/layout.tsx`、`frontend/src/app/ThemeProvider.tsx`（新增）。
+* **面临的技术挑战：** 在 Next.js (App Router) 架构中，`layout.tsx` 默认作为服务端组件用于导出 SEO `metadata`。当引入 `localStorage` 和 DOM 操作等客户端状态时，若直接在 `layout.tsx` 顶部声明 `'use client'`，会导致框架抛出严重编译阻塞：`You are attempting to export "metadata" from a component marked with "use client", which is disallowed.`。必须采用关注点分离（SoC）原则进行架构重构。
+* **原始 Prompt（Next.js 编译冲突排错指令）：**
+  > “我的项目在编译时报了以下错误：You are attempting to export 'metadata' from a component marked with 'use client', which is disallowed. 这是因为在 Next.js 架构中，layout.tsx 默认应该是服务端组件以导出 metadata，但你为了处理全局主题状态，在里面加入了 'use client' 变成了客户端组件，从而引发了规范冲突。
+  > 请接管前端开发，帮我重构全局主题的注入方式，彻底解决这个 Build Error：
+  > 1. 还原 `layout.tsx` 为服务端组件，移除顶部的 'use client'，保留 `export const metadata` 结构。
+  > 2. 抽离客户端主题逻辑：新建全局 `ThemeProvider.tsx` 组件并声明 'use client'，将状态维护、缓存读取、DOM类名修改迁移其中。
+  > 3. 在 `layout.tsx` 中引入并包裹 `{children}`，确保项目能够顺利通过编译。”
+* **功能标注与工程复盘：** 成功实现了 Next.js 混合渲染模式下的架构优化。通过将客户端状态（State）与副作用（Effect）剥离至独立的 `ThemeProvider` 中，保持了根布局（Root Layout）的服务端组件属性，既完美留存了静态元数据导出的能力，又保障了运行时客户端主题状态的全局流畅传递。
+* **联调结果：** Build Error 彻底消除，Next.js 项目成功通过全量编译。无论是在深色极客风与高对比度亮色模式之间的无缝切换，还是在刷新页面后的状态锁死，系统视觉表现均达到商业级规范。
+
+---
+
+## 架构里程碑：JWT 用户鉴权与商业级多用户隔离
+
+### 1. 基于 JWT 的多用户状态隔离与后端安全拦截
+* **对应功能与修改文件：** 引入全套用户注册与登录认证体系，从底层实现真正的多用户数据隔离，奠定系统的商业化基石。主要重构文件：`backend/app.py`、`frontend/src/app/` 认证流组件。
+* **面临的技术挑战：** 1. **密码安全防线**：禁止明文存储，必须引入哈希加盐算法管理用户凭证。
+  2. **关系型越权防御**：数据库 `Session` 表必须前置绑定 `User` 表主键作为外键约束。后端核心的流式问答（SSE）及历史接口必须通过自定义的 JWT 验证装饰器（`Authorization: Bearer`）进行拦截，确保各用户上下文绝对隔离，杜绝水平越权（Bypass Authorization）。
+* **原始 Prompt（全栈认证重构指令）：**
+  > “请接管全栈开发，帮我为项目引入商业级的‘JWT 用户鉴权与多用户隔离’功能。请严格按照以下工程规范进行重构：
+  > 第一部分：后端与数据库深度重构 (backend/app.py)
+  > 1. 新增 User 模型表（id、username 唯一、password_hash）。修改 Session 模型表，增加 user_id 作为指向 User.id 的外键，实现多用户会话隔离。
+  > 2. 新增 POST /api/register（密码哈希存盘）与 POST /api/login（成功则颁发 JWT Token）认证接口。
+  > 3. 编写 @login_required 装饰器，从请求头中提取验证 Token，保护所有核心接口，查询保存数据强行绑定当前 user_id。
+  > 第二部分：前端认证界面与状态持久化
+  > 1. 提供优雅的双色适配登录与注册界面。登录成功后将 Token 写入 localStorage。
+  > 2. 改造前端所有 fetch 请求（含流式读流核心请求），在 headers 中无缝注入 Bearer Token，确保流式打字机鉴权无缝兼容。”
+
+---
+
+### 2. 消除客户端水合（Hydration）错乱与 Next.js 路由对齐
+* **对应功能与修改文件：** 修复前端在处理浏览器持久化缓存（LocalStorage）时引发的 Next.js 服务端预渲染（SSR）冲突，并校正 App Router 架构下的文件系统路由映射。主要重构与新增文件：`frontend/src/app/login/page.tsx`、`frontend/src/app/error.tsx`（新增）。
+* **面临的技术挑战：** 1. **水合错乱（Hydration Mismatch）**：由于 Next.js 默认在服务端预生成 HTML，若直接在组件顶层同步读取只有浏览器才具备的 `localStorage`，会导致两端渲染出的 DOM 树不一致，引发 Next.js 保护机制触发无限循环刷新的 Bug。必须利用 `useEffect` 状态钩子将副作用正确延迟到客户端挂载期执行。
+  2. **路由解耦与对齐**：在 App Router 模式下，误用 Pages 架构的 `next/router` 会导致路由跳转静默失败；同时跳转目标字符串必须与 `src/app/` 下的真实目录树完美映射，否则会触发 404 熔断。
+* **原始 Prompt（排错与路由对齐指令）：**
+  > “1. 我的 Next.js 前端在运行时触发了控制台循环报错并不断强刷：missing required error components, refreshing... 请确保所有读取 localStorage、操作全局 document 的副作用代码必须包裹在 useEffect 中。在根目录下新建规范的默认错误捕获组件 error.tsx 兜底。
+  > 2. 登录成功后页面并没有如预期般跳转，或跳转后弹出 Next.js 的 404 错误。请检查登录表单页面中的路由导入，确保修正为规范的 from 'next/navigation'。仔细盘点 src/app/ 目录下的真实文件夹结构，将 router.push(...) 修正为完全一致的真实路径（如根目录 '/' 或模块目录），确保能顺利进入聊天主界面。”
+* **功能标注与工程复盘：** 成功完成了前端运行时的健壮性加固。通过引入 `useEffect` 边界锁定了浏览器特有的缓存对象，配合新增的全局 `error.tsx` 错误边界组件，彻底终结了水合刷新的异常死循环。同时将路由跳转工具完全对齐为 `next/navigation` 规范，理顺了登录到主界面的流转闭环。
+* **联调结果：** 鉴权系统在全栈层面表现惊艳。未登录状态下能够实施强制路由拦截；注册、登录、登出状态机切换无缝衔接；登录成功后瞬间滑入主聊天页，且流式打字机输出（SSE）和多会话侧边栏依旧保持完美的高性能运转，完美攻克多用户隔离！
+
 
 
