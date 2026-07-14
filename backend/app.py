@@ -8,6 +8,7 @@ import os
 import uuid
 import base64
 import hashlib
+import datetime
 import hmac
 
 app = Flask(__name__)
@@ -328,8 +329,13 @@ def chat():
         current_time = int(time.time())
         
         try:
+            try:
+                chat_user_id = int(g.user_id)
+            except (ValueError, TypeError):
+                chat_user_id = g.user_id
+            
             user_message = ChatHistory(
-                user_id=g.user_id,
+                user_id=chat_user_id,
                 session_id=session_id,
                 role='user',
                 content=message,
@@ -338,7 +344,7 @@ def chat():
             db.session.add(user_message)
             
             assistant_message = ChatHistory(
-                user_id=g.user_id,
+                user_id=chat_user_id,
                 session_id=session_id,
                 role='assistant',
                 content=ai_response,
@@ -346,7 +352,7 @@ def chat():
             )
             db.session.add(assistant_message)
             db.session.commit()
-            print(f"消息已成功保存到数据库: user_id={g.user_id}, session_id={session_id}")
+            print(f"消息已成功保存到数据库: user_id={chat_user_id}, type={type(chat_user_id)}, session_id={session_id}")
         except Exception as e:
             db.session.rollback()
             print(f"保存消息到数据库失败: {e}")
@@ -505,12 +511,17 @@ def change_password():
 @login_required
 def get_stats():
     try:
-        total_chats = ChatHistory.query.filter_by(user_id=g.user_id, role='user').count()
+        try:
+            stats_user_id = int(g.user_id)
+        except (ValueError, TypeError):
+            stats_user_id = g.user_id
         
-        assistant_messages = ChatHistory.query.filter_by(user_id=g.user_id, role='assistant').all()
+        total_chats = ChatHistory.query.filter_by(user_id=stats_user_id, role='user').count()
+        
+        assistant_messages = ChatHistory.query.filter_by(user_id=stats_user_id, role='assistant').all()
         ai_words = sum(len(msg.content) for msg in assistant_messages)
         
-        user_messages = ChatHistory.query.filter_by(user_id=g.user_id, role='user').all()
+        user_messages = ChatHistory.query.filter_by(user_id=stats_user_id, role='user').all()
         
         topic_counts = {
             '编程技术': 0,
@@ -565,6 +576,68 @@ def get_stats():
     except Exception as e:
         print(f"获取统计数据失败: {e}")
         return jsonify({'total_chats': 0, 'ai_words': 0, 'topic_stats': []})
+
+@app.route('/api/user/stats', methods=['GET'])
+@login_required
+def get_user_stats():
+    try:
+        user_id = g.user_id
+        
+        try:
+            db_user_id = int(user_id)
+        except (ValueError, TypeError):
+            db_user_id = user_id
+        
+        print(f"DEBUG - user_id type: {type(user_id)}, value: {user_id}, db_user_id type: {type(db_user_id)}, value: {db_user_id}")
+        
+        total_messages = ChatHistory.query.filter_by(user_id=db_user_id).count()
+        total_chats = total_messages // 2
+        
+        all_messages = ChatHistory.query.filter_by(user_id=db_user_id).all()
+        learning_days = 1
+        if all_messages:
+            dates = set()
+            for msg in all_messages:
+                date_str = time.strftime('%Y-%m-%d', time.localtime(msg.timestamp))
+                dates.add(date_str)
+            learning_days = max(len(dates), 1)
+        
+        tokens_used = 0
+        for msg in all_messages:
+            tokens_used += len(msg.content)
+        tokens_used = int(tokens_used * 1.3)
+        
+        weekly_activity = []
+        today = datetime.date.today()
+        for i in range(6, -1, -1):
+            target_date = today - datetime.timedelta(days=i)
+            date_str = target_date.strftime('%m-%d')
+            
+            target_date_str = target_date.strftime('%Y-%m-%d')
+            count = ChatHistory.query.filter(
+                ChatHistory.user_id == db_user_id,
+                ChatHistory.role == 'user',
+                db.func.date(ChatHistory.timestamp, 'unixepoch') == target_date_str
+            ).count()
+            
+            weekly_activity.append({'date': date_str, 'count': count})
+        
+        print(f"DEBUG - weekly_activity for user {db_user_id}: {weekly_activity}, total_messages: {total_messages}")
+        
+        return jsonify({
+            'total_chats': total_chats,
+            'learning_days': learning_days,
+            'tokens_used': tokens_used,
+            'weekly_activity': weekly_activity
+        })
+    except Exception as e:
+        print(f"获取用户学情数据失败: {e}")
+        return jsonify({
+            'total_chats': 0,
+            'learning_days': 1,
+            'tokens_used': 0,
+            'weekly_activity': []
+        })
 
 if __name__ == '__main__':
     with app.app_context():
