@@ -62,6 +62,10 @@ export default function ProfileDashboard() {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
+  const [themePreference, setThemePreference] = useState<'system' | 'light' | 'dark'>('system');
+  const [isExporting, setIsExporting] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  
   const { theme } = useTheme();
   const { token, logout } = useAuth();
   const router = useRouter();
@@ -336,6 +340,85 @@ export default function ProfileDashboard() {
       setTimeout(() => setShowToast(false), 2000);
     } finally {
       setIsUploadingAvatar(false);
+    }
+  };
+
+  const handleExportData = async () => {
+    setIsExporting(true);
+    try {
+      const response = await fetch('http://127.0.0.1:5000/api/user/export', {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        router.push('/login');
+        return;
+      }
+
+      const resData = await response.json();
+      if (resData.success) {
+        const jsonData = JSON.stringify(resData.data, null, 2);
+        const blob = new Blob([jsonData], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'my_chat_history.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        setToastMessage('聊天记录导出成功');
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 2000);
+      } else {
+        setToastMessage(resData.error || '导出失败');
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 2000);
+      }
+    } catch (err) {
+      console.error('导出数据网络错误:', err);
+      setToastMessage('网络错误，请检查连接');
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 2000);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:5000/api/user/account', {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        router.push('/login');
+        return;
+      }
+
+      const resData = await response.json();
+      if (resData.success) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setIsDeleteModalOpen(false);
+        router.push('/login');
+      } else {
+        setToastMessage(resData.error || '注销失败');
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 2000);
+      }
+    } catch (err) {
+      console.error('注销账号网络错误:', err);
+      setToastMessage('网络错误，请检查连接');
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 2000);
     }
   };
 
@@ -796,6 +879,50 @@ export default function ProfileDashboard() {
           </div>
         )}
 
+        {isDeleteModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div 
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setIsDeleteModalOpen(false)}
+            ></div>
+            <div className={`relative w-full max-w-md mx-4 p-6 rounded-2xl backdrop-blur-md border-red-500/30 ${
+              theme === 'dark' ? 'bg-red-900/80' : 'bg-red-50'
+            }`}>
+              <div className="flex items-center justify-center mb-4">
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                  theme === 'dark' ? 'bg-red-500/20' : 'bg-red-100'
+                }`}>
+                  <span className="text-2xl">⚠️</span>
+                </div>
+              </div>
+              <h3 className="text-lg font-semibold text-center text-red-500 mb-2">
+                危险操作警告
+              </h3>
+              <p className={`text-sm text-center mb-6 ${theme === 'dark' ? 'text-red-300' : 'text-red-600'}`}>
+                此操作不可逆，将永久删除您的账号及所有聊天记录！
+              </p>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className={`flex-1 py-3 rounded-xl font-medium transition ${
+                    theme === 'dark' 
+                      ? 'bg-white/10 hover:bg-white/20 text-neutral-300' 
+                      : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleDeleteAccount}
+                  className="flex-1 py-3 rounded-xl font-medium bg-red-500 hover:bg-red-600 text-white transition"
+                >
+                  确认注销
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className={`p-6 rounded-2xl backdrop-blur-md ${
           theme === 'dark' ? 'bg-white/[0.03] border border-white/10' : 'bg-white border border-gray-200'
         }`}>
@@ -886,6 +1013,80 @@ export default function ProfileDashboard() {
               </div>
             </>
           )}
+        </div>
+
+        <div className={`p-6 rounded-2xl backdrop-blur-md transition-all duration-300 ${
+          theme === 'dark' ? 'bg-white/[0.03] border border-white/10' : 'bg-white border border-gray-200'
+        }`}>
+          <div className={`border-b pb-4 mb-4 ${theme === 'dark' ? 'border-white/5' : 'border-gray-200'}`}>
+            <p className={`text-xs font-medium uppercase tracking-widest ${theme === 'dark' ? 'text-neutral-500' : 'text-gray-500'}`}>
+              Preferences / 偏好设置
+            </p>
+          </div>
+          
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className={`text-sm ${theme === 'dark' ? 'text-neutral-300' : 'text-gray-700'}`}>外观主题</span>
+              <div className="flex gap-2">
+                {(['system', 'light', 'dark'] as const).map((option) => (
+                  <button
+                    key={option}
+                    onClick={() => setThemePreference(option)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                      themePreference === option
+                        ? 'bg-cyan-500 text-white'
+                        : theme === 'dark'
+                          ? 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {option === 'system' ? '跟随系统' : option === 'light' ? '亮色' : '暗色'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-between">
+              <span className={`text-sm ${theme === 'dark' ? 'text-neutral-300' : 'text-gray-700'}`}>数据主权</span>
+              <button
+                onClick={handleExportData}
+                disabled={isExporting}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  theme === 'dark'
+                    ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
+                    : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {isExporting ? '导出中...' : '导出全部聊天记录 (JSON)'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className={`p-6 rounded-2xl backdrop-blur-md border-red-500/30 transition-all duration-300 ${
+          theme === 'dark' ? 'bg-red-900/10' : 'bg-red-50'
+        }`}>
+          <div className={`border-b pb-4 mb-4 ${theme === 'dark' ? 'border-red-500/20' : 'border-red-200'}`}>
+            <p className="text-xs font-medium uppercase tracking-widest text-red-500">
+              Danger Zone / 危险操作区
+            </p>
+          </div>
+          
+          <div className="space-y-3">
+            <button
+              onClick={logout}
+              className="w-full px-4 py-3 rounded-lg text-sm font-medium bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all"
+            >
+              安全退出登录
+            </button>
+            
+            <button
+              onClick={() => setIsDeleteModalOpen(true)}
+              className="w-full px-4 py-3 rounded-lg text-sm font-medium bg-red-500/20 text-red-500 hover:bg-red-500/30 transition-all"
+            >
+              彻底注销账号
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

@@ -639,6 +639,56 @@ def get_user_stats():
             'weekly_activity': []
         })
 
+@app.route('/api/user/export', methods=['GET'])
+@login_required
+def export_user_data():
+    try:
+        user_id = g.user_id
+        try:
+            db_user_id = int(user_id)
+        except (ValueError, TypeError):
+            db_user_id = user_id
+        
+        history = ChatHistory.query.filter_by(user_id=db_user_id).order_by(ChatHistory.timestamp.asc()).all()
+        
+        export_data = []
+        for record in history:
+            export_data.append({
+                'role': record.role,
+                'content': record.content,
+                'timestamp': record.timestamp
+            })
+        
+        return jsonify({
+            'success': True,
+            'data': export_data
+        })
+    except Exception as e:
+        print(f"导出数据失败: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/user/account', methods=['DELETE'])
+@login_required
+def delete_user_account():
+    try:
+        user_id = g.user_id
+        try:
+            db_user_id = int(user_id)
+        except (ValueError, TypeError):
+            db_user_id = user_id
+        
+        ChatHistory.query.filter_by(user_id=db_user_id).delete()
+        Session.query.filter_by(user_id=db_user_id).delete()
+        User.query.filter_by(id=db_user_id).delete()
+        
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': '账号已成功注销'})
+    except Exception as e:
+        db.session.rollback()
+        print(f"注销账号失败: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
