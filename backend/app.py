@@ -11,7 +11,7 @@ import hashlib
 import hmac
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "http://localhost:3000"}})
+CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True, methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 DATABASE_PATH = os.path.join(basedir, 'database.db')
@@ -28,12 +28,14 @@ class User(db.Model):
     username = db.Column(db.String(50), nullable=False, unique=True)
     password_hash = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.Integer, nullable=False)
+    avatar = db.Column(db.Text, nullable=True)
 
     def to_dict(self):
         return {
             'id': self.id,
             'username': self.username,
-            'created_at': self.created_at
+            'created_at': self.created_at,
+            'avatar': self.avatar
         }
 
     def set_password(self, password):
@@ -409,6 +411,96 @@ def delete_history():
         print(f"清空历史记录失败: {e}")
         return jsonify({'status': 'error', 'error': str(e)}), 500
 
+@app.route('/api/user/info', methods=['GET'])
+@login_required
+def get_user_info():
+    try:
+        return jsonify({
+            'success': True,
+            'user': g.user.to_dict()
+        })
+    except Exception as e:
+        print(f"获取用户信息失败: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/user/profile', methods=['GET'])
+@login_required
+def get_user_profile():
+    try:
+        user = g.user
+        return jsonify({
+            'success': True,
+            'id': user.id,
+            'username': user.username,
+            'created_at': user.created_at,
+            'avatar': user.avatar
+        })
+    except Exception as e:
+        print(f"获取用户信息失败: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/user/profile', methods=['PUT'])
+@login_required
+def update_user_profile():
+    try:
+        data = request.get_json()
+        user = g.user
+
+        if 'username' in data:
+            new_username = data['username'].strip()
+            if not new_username:
+                return jsonify({'success': False, 'error': '用户名不能为空'}), 400
+            
+            existing_user = User.query.filter_by(username=new_username).first()
+            if existing_user and existing_user.id != user.id:
+                return jsonify({'success': False, 'error': '该用户名已被使用'}), 400
+            
+            user.username = new_username
+
+        if 'avatar' in data:
+            user.avatar = data['avatar']
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'id': user.id,
+            'username': user.username,
+            'created_at': user.created_at,
+            'avatar': user.avatar
+        })
+    except Exception as e:
+        db.session.rollback()
+        print(f"更新用户信息失败: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/user/change-password', methods=['POST'])
+@login_required
+def change_password():
+    try:
+        data = request.get_json()
+        old_password = data.get('old_password', '')
+        new_password = data.get('new_password', '')
+
+        if not old_password or not new_password:
+            return jsonify({'success': False, 'error': '原密码和新密码不能为空'}), 400
+
+        if len(new_password) < 6:
+            return jsonify({'success': False, 'error': '新密码长度至少6个字符'}), 400
+
+        if not g.user.check_password(old_password):
+            return jsonify({'success': False, 'error': '原密码输入错误'}), 401
+
+        g.user.set_password(new_password)
+        db.session.commit()
+
+        return jsonify({'success': True, 'message': '密码修改成功'})
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"修改密码失败: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/stats', methods=['GET'])
 @login_required
 def get_stats():
@@ -477,4 +569,5 @@ def get_stats():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
+        print("全新的关系型数据库结构已成功初始化！")
     app.run(debug=True, threaded=True, host='0.0.0.0', port=5000)

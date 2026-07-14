@@ -48,26 +48,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('浏览器环境不可用');
     }
 
-    const response = await fetch('http://127.0.0.1:5000/api/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ username, password }),
-    });
+    try {
+      const response = await fetch('http://127.0.0.1:5000/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (!response.ok || !data.success) {
-      throw new Error(data.error || '登录失败');
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || '登录失败');
+      }
+
+      setToken(data.token);
+      setUser(data.user);
+      setIsAuthenticated(true);
+      
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+    } catch (err) {
+      console.error('登录网络错误:', err);
+      throw err;
     }
-
-    setToken(data.token);
-    setUser(data.user);
-    setIsAuthenticated(true);
-    
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('user', JSON.stringify(data.user));
   }, []);
 
   const register = useCallback(async (username: string, password: string) => {
@@ -75,26 +80,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('浏览器环境不可用');
     }
 
-    const response = await fetch('http://127.0.0.1:5000/api/register', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ username, password }),
-    });
+    try {
+      const response = await fetch('http://127.0.0.1:5000/api/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (!response.ok || !data.success) {
-      throw new Error(data.error || '注册失败');
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || '注册失败');
+      }
+
+      setToken(data.token);
+      setUser(data.user);
+      setIsAuthenticated(true);
+      
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+    } catch (err) {
+      console.error('注册网络错误:', err);
+      throw err;
     }
-
-    setToken(data.token);
-    setUser(data.user);
-    setIsAuthenticated(true);
-    
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('user', JSON.stringify(data.user));
   }, []);
 
   const logout = useCallback(() => {

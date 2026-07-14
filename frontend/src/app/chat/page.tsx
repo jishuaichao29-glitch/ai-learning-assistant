@@ -69,7 +69,7 @@ export default function ChatPage() {
     fetchSessions();
   }, [fetchSessions]);
 
-  const fetchHistory = async (sessionId: string) => {
+  const fetchHistory = useCallback(async (sessionId: string) => {
     try {
       const response = await fetch(`http://127.0.0.1:5000/api/history?session_id=${sessionId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -83,13 +83,13 @@ export default function ChatPage() {
     } catch (err) {
       console.error("Error fetching history:", err);
     }
-  };
+  }, [token]);
 
   useEffect(() => {
     if (currentSessionId) {
       fetchHistory(currentSessionId);
     }
-  }, [currentSessionId]);
+  }, [currentSessionId, fetchHistory]);
 
   const createNewSession = async () => {
     try {
@@ -335,6 +335,13 @@ export default function ChatPage() {
             <span>{theme === 'dark' ? '☀️' : '🌙'}</span>
             <span className="text-xs dark:text-neutral-400 text-gray-600">{theme === 'dark' ? '亮色模式' : '深色模式'}</span>
           </button>
+          <Link
+            href="/profile"
+            className="w-full py-2 rounded-xl dark:bg-purple-900/20 bg-purple-100 hover:dark:bg-purple-900/30 hover:bg-purple-200 dark:border border-purple-500/30 border-purple-300 text-purple-600 transition-colors flex items-center justify-center space-x-2"
+          >
+            <span>👤</span>
+            <span className="text-xs">个人中心</span>
+          </Link>
           <button
             onClick={logout}
             className="w-full py-2 rounded-xl dark:bg-red-900/20 bg-red-100 hover:dark:bg-red-900/30 hover:bg-red-200 dark:border border-red-500/30 border-red-300 text-red-600 transition-colors flex items-center justify-center space-x-2"

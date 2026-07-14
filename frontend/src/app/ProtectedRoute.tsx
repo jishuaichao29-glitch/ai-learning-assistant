@@ -13,11 +13,16 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   const router = useRouter();
   const [isChecking, setIsChecking] = useState(true);
   const [hasRedirected, setHasRedirected] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [hasToken, setHasToken] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+    
     if (typeof window === 'undefined') return;
 
     const savedToken = localStorage.getItem('token');
+    setHasToken(!!savedToken);
     
     if (savedToken) {
       setIsChecking(false);
@@ -36,6 +41,14 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     }
   }, [isAuthenticated, router, hasRedirected]);
 
+  if (!mounted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-neutral-950">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500"></div>
+      </div>
+    );
+  }
+
   if (isChecking) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-neutral-950">
@@ -44,7 +57,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     );
   }
 
-  if (!isAuthenticated && !localStorage.getItem('token')) {
+  if (!isAuthenticated && !hasToken) {
     return null;
   }
 
