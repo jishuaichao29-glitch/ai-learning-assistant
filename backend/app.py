@@ -489,7 +489,7 @@ def change_password():
             return jsonify({'success': False, 'error': '新密码长度至少6个字符'}), 400
 
         if not g.user.check_password(old_password):
-            return jsonify({'success': False, 'error': '原密码输入错误'}), 401
+            return jsonify({'success': False, 'error': '原密码输入错误'}), 400
 
         g.user.set_password(new_password)
         db.session.commit()

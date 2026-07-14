@@ -36,8 +36,8 @@ export default function ProfileDashboard() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
-  const [passwordSuccess, setPasswordSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -115,7 +115,6 @@ export default function ProfileDashboard() {
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError('');
-    setPasswordSuccess('');
 
     if (!oldPassword || !newPassword || !confirmPassword) {
       setPasswordError('请填写所有密码字段');
@@ -157,10 +156,12 @@ export default function ProfileDashboard() {
       const resData = await response.json();
 
       if (resData.success) {
-        setPasswordSuccess('密码修改成功！');
+        setIsModalOpen(false);
         setOldPassword('');
         setNewPassword('');
         setConfirmPassword('');
+        logout();
+        router.push('/login');
       } else {
         setPasswordError(resData.error || '修改失败，请重试');
       }
@@ -170,6 +171,12 @@ export default function ProfileDashboard() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleBindFeature = () => {
+    setToastMessage('为了保障您的数据安全，该商业化增值功能（短信/邮件认证网关）正在内测开发中，敬请期待！');
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
   };
 
   const handleLogout = () => {
@@ -551,82 +558,71 @@ export default function ProfileDashboard() {
         }`}>
           <div className={`border-b pb-4 mb-4 ${theme === 'dark' ? 'border-white/5' : 'border-gray-200'}`}>
             <p className={`text-xs font-medium uppercase tracking-widest ${theme === 'dark' ? 'text-neutral-500' : 'text-gray-500'}`}>
-              Security Settings / 安全设置
+              Security Settings / 账号与安全
             </p>
           </div>
 
-          <form onSubmit={handleChangePassword} className="space-y-4">
-            <div className="space-y-2">
-              <label className={`text-xs font-medium ${theme === 'dark' ? 'text-neutral-500' : 'text-gray-500'}`}>原密码</label>
-              <input
-                type="password"
-                value={oldPassword}
-                onChange={(e) => setOldPassword(e.target.value)}
-                className={`w-full px-4 py-3 rounded-xl outline-none transition ${
-                  theme === 'dark' 
-                    ? 'bg-neutral-900/80 border border-white/10 focus:border-cyan-500 text-white placeholder-neutral-500' 
-                    : 'bg-gray-50 border border-gray-200 focus:border-cyan-500 text-gray-900 placeholder-gray-400'
-                }`}
-                placeholder="请输入原密码"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className={`text-xs font-medium ${theme === 'dark' ? 'text-neutral-500' : 'text-gray-500'}`}>新密码</label>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className={`w-full px-4 py-3 rounded-xl outline-none transition ${
-                  theme === 'dark' 
-                    ? 'bg-neutral-900/80 border border-white/10 focus:border-cyan-500 text-white placeholder-neutral-500' 
-                    : 'bg-gray-50 border border-gray-200 focus:border-cyan-500 text-gray-900 placeholder-gray-400'
-                }`}
-                placeholder="请输入新密码（至少6个字符）"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className={`text-xs font-medium ${theme === 'dark' ? 'text-neutral-500' : 'text-gray-500'}`}>确认新密码</label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className={`w-full px-4 py-3 rounded-xl outline-none transition ${
-                  theme === 'dark' 
-                    ? 'bg-neutral-900/80 border border-white/10 focus:border-cyan-500 text-white placeholder-neutral-500' 
-                    : 'bg-gray-50 border border-gray-200 focus:border-cyan-500 text-gray-900 placeholder-gray-400'
-                }`}
-                placeholder="请再次输入新密码"
-              />
-            </div>
-
-            {passwordError && (
-              <div className={`p-3 rounded-xl text-sm ${
-                theme === 'dark' ? 'bg-red-900/20 text-red-400' : 'bg-red-50 text-red-600'
-              }`}>
-                ⚠️ {passwordError}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between py-3 border-b border-gray-200/50">
+              <div className="flex items-center space-x-3">
+                <span className="text-lg">🔐</span>
+                <div>
+                  <p className={`text-sm font-medium ${theme === 'dark' ? 'text-neutral-200' : 'text-gray-800'}`}>登录密码</p>
+                  <p className={`text-xs ${theme === 'dark' ? 'text-green-400' : 'text-green-600'}`}>已设置保障中</p>
+                </div>
               </div>
-            )}
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className={`px-4 py-2 rounded-lg text-xs font-medium transition ${
+                  theme === 'dark' 
+                    ? 'bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/30 text-cyan-400' 
+                    : 'bg-cyan-100 hover:bg-cyan-200 border border-cyan-300 text-cyan-700'
+                }`}
+              >
+                修改密码
+              </button>
+            </div>
 
-            {passwordSuccess && (
-              <div className={`p-3 rounded-xl text-sm ${
-                theme === 'dark' ? 'bg-green-900/20 text-green-400' : 'bg-green-50 text-green-600'
-              }`}>
-                ✅ {passwordSuccess}
+            <div className="flex items-center justify-between py-3 border-b border-gray-200/50">
+              <div className="flex items-center space-x-3">
+                <span className="text-lg">📧</span>
+                <div>
+                  <p className={`text-sm font-medium ${theme === 'dark' ? 'text-neutral-200' : 'text-gray-800'}`}>电子邮箱</p>
+                  <p className={`text-xs ${theme === 'dark' ? 'text-red-400' : 'text-red-600'}`}>未绑定</p>
+                </div>
               </div>
-            )}
+              <button
+                onClick={handleBindFeature}
+                className={`px-4 py-2 rounded-lg text-xs font-medium transition ${
+                  theme === 'dark' 
+                    ? 'bg-white/5 hover:bg-white/10 border border-white/10 text-neutral-400' 
+                    : 'bg-gray-100 hover:bg-gray-200 border border-gray-200 text-gray-500'
+                }`}
+              >
+                去绑定
+              </button>
+            </div>
 
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className={`w-full py-3 rounded-xl font-medium transition flex items-center justify-center space-x-2 ${
-                theme === 'dark' 
-                  ? 'bg-cyan-600 hover:bg-cyan-500 disabled:bg-neutral-700 text-white' 
-                  : 'bg-cyan-600 hover:bg-cyan-500 disabled:bg-gray-200 text-white'
-              }`}
-            >
-              <span>{isSubmitting ? '处理中...' : '修改密码'}</span>
-            </button>
-          </form>
+            <div className="flex items-center justify-between py-3">
+              <div className="flex items-center space-x-3">
+                <span className="text-lg">📱</span>
+                <div>
+                  <p className={`text-sm font-medium ${theme === 'dark' ? 'text-neutral-200' : 'text-gray-800'}`}>手机号码</p>
+                  <p className={`text-xs ${theme === 'dark' ? 'text-red-400' : 'text-red-600'}`}>未绑定</p>
+                </div>
+              </div>
+              <button
+                onClick={handleBindFeature}
+                className={`px-4 py-2 rounded-lg text-xs font-medium transition ${
+                  theme === 'dark' 
+                    ? 'bg-white/5 hover:bg-white/10 border border-white/10 text-neutral-400' 
+                    : 'bg-gray-100 hover:bg-gray-200 border border-gray-200 text-gray-500'
+                }`}
+              >
+                去绑定
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className={`p-6 rounded-2xl backdrop-blur-md ${
@@ -652,6 +648,117 @@ export default function ProfileDashboard() {
             </button>
           </div>
         </div>
+
+        {isModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div 
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => {
+                setIsModalOpen(false);
+                setPasswordError('');
+              }}
+            ></div>
+            <div className={`relative w-full max-w-md mx-4 p-6 rounded-2xl backdrop-blur-md ${
+              theme === 'dark' ? 'bg-neutral-900/90 border border-white/10' : 'bg-white/95 border border-gray-200 shadow-2xl'
+            }`}>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                  修改登录密码
+                </h3>
+                <button
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    setPasswordError('');
+                  }}
+                  className={`text-neutral-400 hover:text-neutral-200 transition ${theme === 'dark' ? 'text-neutral-400' : 'text-gray-400'}`}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleChangePassword} className="space-y-4">
+                <div className="space-y-2">
+                  <label className={`text-xs font-medium ${theme === 'dark' ? 'text-neutral-500' : 'text-gray-500'}`}>原密码</label>
+                  <input
+                    type="password"
+                    value={oldPassword}
+                    onChange={(e) => setOldPassword(e.target.value)}
+                    className={`w-full px-4 py-3 rounded-xl outline-none transition ${
+                      theme === 'dark' 
+                        ? 'bg-neutral-800/80 border border-white/10 focus:border-cyan-500 text-white placeholder-neutral-500' 
+                        : 'bg-gray-50 border border-gray-200 focus:border-cyan-500 text-gray-900 placeholder-gray-400'
+                    }`}
+                    placeholder="请输入原密码"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className={`text-xs font-medium ${theme === 'dark' ? 'text-neutral-500' : 'text-gray-500'}`}>新密码</label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className={`w-full px-4 py-3 rounded-xl outline-none transition ${
+                      theme === 'dark' 
+                        ? 'bg-neutral-800/80 border border-white/10 focus:border-cyan-500 text-white placeholder-neutral-500' 
+                        : 'bg-gray-50 border border-gray-200 focus:border-cyan-500 text-gray-900 placeholder-gray-400'
+                    }`}
+                    placeholder="请输入新密码（至少6个字符）"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className={`text-xs font-medium ${theme === 'dark' ? 'text-neutral-500' : 'text-gray-500'}`}>确认新密码</label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className={`w-full px-4 py-3 rounded-xl outline-none transition ${
+                      theme === 'dark' 
+                        ? 'bg-neutral-800/80 border border-white/10 focus:border-cyan-500 text-white placeholder-neutral-500' 
+                        : 'bg-gray-50 border border-gray-200 focus:border-cyan-500 text-gray-900 placeholder-gray-400'
+                    }`}
+                    placeholder="请再次输入新密码"
+                  />
+                </div>
+
+                {passwordError && (
+                  <div className={`p-3 rounded-xl text-sm ${
+                    theme === 'dark' ? 'bg-red-900/20 text-red-400' : 'bg-red-50 text-red-600'
+                  }`}>
+                    ⚠️ {passwordError}
+                  </div>
+                )}
+
+                <div className="flex space-x-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsModalOpen(false);
+                      setPasswordError('');
+                    }}
+                    className={`flex-1 py-3 rounded-xl font-medium transition ${
+                      theme === 'dark' 
+                        ? 'bg-white/10 hover:bg-white/20 text-neutral-300' 
+                        : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                    }`}
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className={`flex-1 py-3 rounded-xl font-medium transition flex items-center justify-center ${
+                      theme === 'dark' 
+                        ? 'bg-cyan-600 hover:bg-cyan-500 disabled:bg-neutral-700 text-white' 
+                        : 'bg-cyan-600 hover:bg-cyan-500 disabled:bg-gray-200 text-white'
+                    }`}
+                  >
+                    {isSubmitting ? '处理中...' : '确认修改'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
