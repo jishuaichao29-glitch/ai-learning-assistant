@@ -26,6 +26,11 @@ export default function ChatPage() {
   const [isWaiting, setIsWaiting] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string>('');
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState('');
+  const [uploadSuccess, setUploadSuccess] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const currentSessionIdRef = useRef<string>('');
   const { theme, toggleTheme } = useTheme();
@@ -240,6 +245,85 @@ export default function ChatPage() {
     }
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
+        setUploadMessage('请选择 PDF 文件');
+        setUploadSuccess(false);
+        setSelectedFile(null);
+        return;
+      }
+      setSelectedFile(file);
+      setUploadMessage('');
+      setUploadSuccess(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
+        setUploadMessage('请选择 PDF 文件');
+        setUploadSuccess(false);
+        setSelectedFile(null);
+        return;
+      }
+      setSelectedFile(file);
+      setUploadMessage('');
+      setUploadSuccess(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+  };
+
+  const handleUpload = async () => {
+    if (!selectedFile || !token) return;
+
+    setUploadLoading(true);
+    setUploadMessage('正在进行向量化解析...');
+    setUploadSuccess(false);
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+
+    try {
+      const response = await fetch('http://127.0.0.1:5000/api/knowledge/upload', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setUploadMessage(`已成功构建您的私有知识库！共解析 ${data.chunks_count} 个文本块`);
+        setUploadSuccess(true);
+        setSelectedFile(null);
+      } else {
+        setUploadMessage(data.error || '上传失败');
+        setUploadSuccess(false);
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      setUploadMessage('上传失败，请检查网络连接');
+      setUploadSuccess(false);
+    } finally {
+      setUploadLoading(false);
+    }
+  };
+
+  const resetUpload = () => {
+    setSelectedFile(null);
+    setUploadMessage('');
+    setUploadSuccess(false);
+  };
+
   const markdownComponents = {
     p: ({ children }: { children?: React.ReactNode }) => (
       <p className="mb-2 last:mb-0">{children}</p>
@@ -335,6 +419,13 @@ export default function ChatPage() {
             <span>{theme === 'dark' ? '☀️' : '🌙'}</span>
             <span className="text-xs dark:text-neutral-400 text-gray-600">{theme === 'dark' ? '亮色模式' : '深色模式'}</span>
           </button>
+          <button
+            onClick={() => setShowUploadModal(true)}
+            className="w-full py-2 rounded-xl dark:bg-gradient-to-r from-cyan-900/30 to-blue-900/30 bg-gradient-to-r from-cyan-100 to-blue-100 hover:dark:from-cyan-900/50 hover:dark:to-blue-900/50 hover:from-cyan-200 hover:to-blue-200 dark:border border-cyan-500/30 border-cyan-300 text-cyan-600 transition-all flex items-center justify-center space-x-2 shadow-[0_0_15px_rgba(6,182,212,0.2)] hover:shadow-[0_0_25px_rgba(6,182,212,0.4)]"
+          >
+            <span>📚</span>
+            <span className="text-xs">上传 PDF 文档</span>
+          </button>
           <Link
             href="/profile"
             className="w-full py-2 rounded-xl dark:bg-purple-900/20 bg-purple-100 hover:dark:bg-purple-900/30 hover:bg-purple-200 dark:border border-purple-500/30 border-purple-300 text-purple-600 transition-colors flex items-center justify-center space-x-2"
@@ -367,9 +458,9 @@ export default function ChatPage() {
               <span>🏠</span>
               <span className="hidden sm:inline">返回首页</span>
             </Link>
-            <Link href="/profile" className="px-4 py-2 rounded-xl text-xs font-medium backdrop-blur-md dark:bg-cyan-900/20 bg-cyan-100 hover:dark:bg-cyan-900/40 hover:bg-cyan-200 dark:border border-cyan-500/20 border-cyan-300 text-cyan-600 transition-colors flex items-center space-x-2">
+            <Link href="/dashboard" className="px-4 py-2 rounded-xl text-xs font-medium backdrop-blur-md dark:bg-cyan-900/20 bg-cyan-100 hover:dark:bg-cyan-900/40 hover:bg-cyan-200 dark:border border-cyan-500/20 border-cyan-300 text-cyan-600 transition-colors flex items-center space-x-2">
               <span>🌌</span>
-              <span className="hidden sm:inline">科技数据看板</span>
+              <span className="hidden sm:inline">学情数据看板</span>
             </Link>
             <button
               onClick={handleClearHistory}
@@ -442,6 +533,119 @@ export default function ChatPage() {
         </footer>
       </main>
     </div>
+
+    {showUploadModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div 
+          className="absolute inset-0 dark:bg-black/70 bg-gray-900/50 backdrop-blur-sm"
+          onClick={() => { setShowUploadModal(false); resetUpload(); }}
+        ></div>
+        <div className="relative w-full max-w-md rounded-2xl dark:bg-neutral-900 bg-white dark:border border-gray-700 shadow-2xl overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-600"></div>
+          
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg">
+                  <span className="text-white text-xl">📚</span>
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold dark:text-white text-gray-900">上传 PDF 文档</h2>
+                  <p className="text-xs dark:text-neutral-500 text-gray-500">构建您的私有知识库</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setShowUploadModal(false); resetUpload(); }}
+                className="p-2 rounded-lg dark:hover:bg-white/10 hover:bg-gray-100 transition-colors"
+              >
+                <span className="dark:text-neutral-400 text-gray-500">✕</span>
+              </button>
+            </div>
+
+            <div 
+              className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all ${
+                selectedFile 
+                  ? 'dark:border-cyan-500/50 border-cyan-500 dark:bg-cyan-900/10 bg-cyan-50' 
+                  : 'dark:border-gray-600 border-gray-300 dark:hover:border-cyan-500/50 hover:border-cyan-500'
+              }`}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+            >
+              <input
+                type="file"
+                accept=".pdf"
+                onChange={handleFileChange}
+                className="absolute inset-0 opacity-0 cursor-pointer"
+              />
+              {selectedFile ? (
+                <div className="flex flex-col items-center space-y-3">
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
+                    <span className="text-white text-2xl">✓</span>
+                  </div>
+                  <div>
+                    <p className="font-medium dark:text-white text-gray-900 truncate max-w-xs">{selectedFile.name}</p>
+                    <p className="text-xs dark:text-neutral-500 text-gray-500">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center space-y-4">
+                  <div className="w-16 h-16 rounded-full dark:bg-white/10 bg-gray-100 flex items-center justify-center">
+                    <span className="text-3xl">📄</span>
+                  </div>
+                  <div>
+                    <p className="font-medium dark:text-white text-gray-900">拖拽 PDF 文件到此处</p>
+                    <p className="text-xs dark:text-neutral-500 text-gray-500 mt-1">或点击选择文件</p>
+                  </div>
+                  <div className="flex items-center space-x-2 text-xs dark:text-neutral-600 text-gray-400">
+                    <span>支持 .pdf 格式</span>
+                    <span>•</span>
+                    <span>最大 50MB</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {uploadMessage && (
+              <div className={`mt-4 p-3 rounded-xl text-sm flex items-center space-x-2 ${
+                uploadSuccess 
+                  ? 'dark:bg-green-900/20 bg-green-50 dark:text-green-400 text-green-700' 
+                  : 'dark:bg-red-900/20 bg-red-50 dark:text-red-400 text-red-700'
+              }`}>
+                <span>{uploadSuccess ? '✓' : '⚠️'}</span>
+                <span>{uploadMessage}</span>
+              </div>
+            )}
+
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => { setShowUploadModal(false); resetUpload(); }}
+                className="flex-1 py-3 rounded-xl dark:bg-white/5 bg-gray-100 hover:dark:bg-white/10 hover:bg-gray-200 dark:border border-gray-600 border-gray-300 font-medium transition-colors dark:text-white text-gray-900"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleUpload}
+                disabled={!selectedFile || uploadLoading}
+                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:dark:from-neutral-700 disabled:dark:to-neutral-600 disabled:from-gray-300 disabled:to-gray-400 font-medium transition-all text-white shadow-lg shadow-cyan-500/25 disabled:shadow-none flex items-center justify-center space-x-2"
+              >
+                {uploadLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <span>正在进行向量化解析...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>🚀</span>
+                    <span>上传并构建知识库</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+
     </ProtectedRoute>
   );
 }

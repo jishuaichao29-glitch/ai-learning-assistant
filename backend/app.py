@@ -5,11 +5,89 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import time
 import json
 import os
+import traceback
+
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+os.environ['NO_PROXY'] = '*'
+os.environ['no_proxy'] = '*'
+
+proxy_vars = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy']
+for var in proxy_vars:
+    if var in os.environ:
+        del os.environ[var]
+
+import requests
+
+def create_no_proxy_session():
+    session = requests.Session()
+    session.trust_env = False
+    session.max_redirects = 10
+    adapter = requests.adapters.HTTPAdapter(max_retries=3)
+    session.mount('https://', adapter)
+    session.mount('http://', adapter)
+    return session
+
+try:
+    import huggingface_hub.file_download as file_download_module
+    import huggingface_hub.utils._http as http_module
+
+    original_get_session = http_module.get_session
+
+    def patched_get_session():
+        return create_no_proxy_session()
+
+    http_module.get_session = patched_get_session
+
+    original_get_metadata_or_catch_error = file_download_module._get_metadata_or_catch_error
+
+    def patched_get_metadata_or_catch_error(*, repo_id, filename, repo_type, revision, endpoint, proxies, etag_timeout, headers, token, local_files_only, relative_filename=None, storage_folder=None):
+        session = http_module.get_session()
+        base_url = endpoint or 'https://hf-mirror.com'
+        full_url = f"{base_url}/{repo_id}/resolve/{revision}/{filename}"
+
+        try:
+            response = session.head(full_url, headers=headers, timeout=etag_timeout, allow_redirects=True)
+            response.raise_for_status()
+
+            raw_etag = response.headers.get('etag', '').strip('"\'')
+            raw_commit = response.headers.get('x-repo-commit') or response.headers.get('x-huggingface-commit') or 'unknown'
+            commit_hash = raw_commit.strip('"\'')
+            content_length = int(response.headers.get('content-length', 0))
+
+            return_url = f"{base_url}/{repo_id}/resolve/{revision}/{filename}"
+            return (return_url, raw_etag, commit_hash, content_length, None, None)
+
+        except Exception as head_e:
+            try:
+                response = session.get(full_url, headers=headers, timeout=etag_timeout, allow_redirects=True)
+                response.raise_for_status()
+
+                raw_etag = response.headers.get('etag', '').strip('"\'')
+                raw_commit = response.headers.get('x-repo-commit') or response.headers.get('x-huggingface-commit') or 'unknown'
+                commit_hash = raw_commit.strip('"\'')
+                content_length = len(response.content)
+
+                return_url = f"{base_url}/{repo_id}/resolve/{revision}/{filename}"
+                return (return_url, raw_etag, commit_hash, content_length, None, None)
+
+            except Exception as get_e:
+                return (None, None, None, 0, None, get_e)
+
+    file_download_module._get_metadata_or_catch_error = patched_get_metadata_or_catch_error
+    print("✅ huggingface_hub 已被 Patch 以支持 hf-mirror.com")
+except Exception as e:
+    print(f"⚠️ huggingface_hub Patch 失败: {e}")
+
 import uuid
 import base64
 import hashlib
 import datetime
 import hmac
+from PyPDF2 import PdfReader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+import faiss
+import numpy as np
+from sentence_transformers import SentenceTransformer
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True, methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
@@ -20,9 +98,104 @@ app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DATABASE_PATH}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production-2024'
 
+LLM_API_KEY = os.environ.get('LLM_API_KEY', '')
+LLM_API_BASE = os.environ.get('LLM_API_BASE', 'https://open.bigmodel.cn/api/paas/v4/chat/completions')
+LLM_MODEL = os.environ.get('LLM_MODEL', 'glm-4-flash')
+
 print(f"数据库连接路径: {DATABASE_PATH}")
+print(f"大模型配置 - API_BASE: {LLM_API_BASE}, MODEL: {LLM_MODEL}, API_KEY: {'已配置' if LLM_API_KEY else '未配置'}")
+
+VECTOR_STORE_DIR = os.path.join(basedir, 'vector_store')
+if not os.path.exists(VECTOR_STORE_DIR):
+    os.makedirs(VECTOR_STORE_DIR)
+print(f"向量存储目录: {VECTOR_STORE_DIR}")
 
 db = SQLAlchemy(app)
+
+EMBEDDING_MODEL = None
+
+def _pre_download_model():
+    import requests
+    import json
+    
+    session = requests.Session()
+    session.trust_env = False
+    
+    cache_base = os.path.expanduser('~/.cache/huggingface/hub')
+    repo_cache = os.path.join(cache_base, 'models--sentence-transformers--all-MiniLM-L6-v2')
+    snapshot_dir = os.path.join(repo_cache, 'snapshots', '1110a243fdf4706b3f48f1d95db1a4f5529b4d41')
+    
+    os.makedirs(snapshot_dir, exist_ok=True)
+    
+    files_to_download = [
+        'modules.json',
+        'config_sentence_transformers.json',
+        'config.json',
+        'tokenizer.json',
+        'tokenizer_config.json',
+        'vocab.txt',
+        'pytorch_model.bin',
+        'special_tokens_map.json',
+        '1_Pooling/config.json',
+    ]
+    
+    all_success = True
+    for filename in files_to_download:
+        url = f"https://hf-mirror.com/sentence-transformers/all-MiniLM-L6-v2/resolve/main/{filename}"
+        try:
+            response = session.get(url, timeout=60, allow_redirects=True)
+            response.raise_for_status()
+            
+            content = response.content
+            snapshot_path = os.path.join(snapshot_dir, filename)
+            os.makedirs(os.path.dirname(snapshot_path), exist_ok=True)
+            
+            with open(snapshot_path, 'wb') as f:
+                f.write(content)
+                
+        except Exception as e:
+            all_success = False
+            print(f"预下载 {filename} 失败: {e}")
+    
+    normalize_dir = os.path.join(snapshot_dir, '2_Normalize')
+    os.makedirs(normalize_dir, exist_ok=True)
+    normalize_config = {
+        "idx": 2,
+        "name": "2",
+        "path": "2_Normalize",
+        "type": "sentence_transformers.models.Normalize",
+        "params": {"p": 2, "dim": None}
+    }
+    with open(os.path.join(normalize_dir, 'config.json'), 'w') as f:
+        json.dump(normalize_config, f, indent=2)
+    
+    refs_dir = os.path.join(repo_cache, 'refs')
+    os.makedirs(refs_dir, exist_ok=True)
+    with open(os.path.join(refs_dir, 'main'), 'w') as f:
+        f.write('1110a243fdf4706b3f48f1d95db1a4f5529b4d41')
+    
+    return all_success
+
+def get_embedding_model():
+    global EMBEDDING_MODEL
+    if EMBEDDING_MODEL is None:
+        try:
+            EMBEDDING_MODEL = SentenceTransformer('all-MiniLM-L6-v2')
+        except Exception as e:
+            print(f"模型加载失败，尝试预下载: {e}")
+            
+            try:
+                print("开始预下载模型文件...")
+                _pre_download_model()
+                print("预下载完成，尝试本地加载...")
+                snapshot_dir = os.path.join(os.path.expanduser('~/.cache/huggingface/hub'), 'models--sentence-transformers--all-MiniLM-L6-v2', 'snapshots', '1110a243fdf4706b3f48f1d95db1a4f5529b4d41')
+                EMBEDDING_MODEL = SentenceTransformer(snapshot_dir)
+                print("✅ 模型通过预下载成功加载！")
+            except Exception as pre_e:
+                print(f"预下载也失败: {pre_e}")
+                traceback.print_exc()
+                raise RuntimeError("AI 向量化模型下载失败，请检查网络代理或稍后重试。")
+    return EMBEDDING_MODEL
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -233,7 +406,113 @@ def login():
         print(f"登录失败: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-def generate_ai_response(message):
+def retrieve_knowledge(user_id, query, top_k=3):
+    user_id_str = str(user_id)
+    index_path = os.path.join(VECTOR_STORE_DIR, f'{user_id_str}.faiss')
+    chunks_path = os.path.join(VECTOR_STORE_DIR, f'{user_id_str}_chunks.json')
+    
+    if not os.path.exists(index_path) or not os.path.exists(chunks_path):
+        return None
+    
+    try:
+        index = faiss.read_index(index_path)
+        
+        with open(chunks_path, 'r', encoding='utf-8') as f:
+            chunks = json.load(f)
+        
+        model = get_embedding_model()
+        query_embedding = model.encode([query])
+        
+        distances, indices = index.search(np.array(query_embedding), top_k)
+        
+        retrieved_chunks = []
+        for idx in indices[0]:
+            if idx < len(chunks):
+                retrieved_chunks.append(chunks[idx])
+        
+        print("===== 检索到的文本 =====")
+        for i, chunk in enumerate(retrieved_chunks):
+            print(f"{i+1}. {chunk}")
+        print("===== 检索结束 =====")
+        
+        return retrieved_chunks if retrieved_chunks else None
+    
+    except Exception as e:
+        print(f"知识库检索失败: {e}")
+        traceback.print_exc()
+        return None
+
+def call_llm(messages):
+    print("===== 发送给大模型的 Messages =====")
+    for msg in messages:
+        print(f"role: {msg['role']}")
+        print(f"content: {msg['content'][:200]}..." if len(msg['content']) > 200 else f"content: {msg['content']}")
+        print()
+    print("===== Messages 结束 =====")
+    
+    if not LLM_API_KEY:
+        return generate_fallback_response(messages)
+    
+    try:
+        session = requests.Session()
+        session.trust_env = False
+        
+        payload = {
+            'model': LLM_MODEL,
+            'messages': messages,
+            'stream': False
+        }
+        
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {LLM_API_KEY}'
+        }
+        
+        response = session.post(LLM_API_BASE, json=payload, headers=headers, timeout=60)
+        response.raise_for_status()
+        
+        result = response.json()
+        
+        if 'choices' in result and result['choices']:
+            return result['choices'][0]['message']['content']
+        
+        return "抱歉，我暂时无法回答这个问题。"
+    
+    except Exception as e:
+        print(f"大模型调用失败: {e}")
+        traceback.print_exc()
+        return generate_fallback_response(messages)
+
+def generate_fallback_response(messages):
+    system_content = ""
+    user_message = ""
+    
+    for msg in messages:
+        if msg['role'] == 'system':
+            system_content = msg['content']
+        elif msg['role'] == 'user':
+            user_message = msg['content']
+    
+    if '参考资料' in system_content:
+        import re
+        match = re.search(r'参考资料：\n(.+)', system_content, re.DOTALL)
+        if match:
+            reference_text = match.group(1).strip()
+            
+            cleaned_message = user_message.replace('？', '').replace('？', '')
+            
+            single_chars = re.findall(r'[\u4e00-\u9fa5]', cleaned_message)
+            keywords = []
+            for i in range(len(single_chars) - 1):
+                keywords.append(single_chars[i] + single_chars[i+1])
+            
+            if keywords:
+                for sentence in reference_text.split('\n'):
+                    if any(keyword in sentence for keyword in keywords):
+                        return sentence
+            
+            return '知识库中未找到相关内容'
+    
     responses = {
         '你好': '你好呀！😊 很高兴见到你！',
         '你是谁': '我是你的AI学习助手，专门帮助你解答各种问题！',
@@ -246,10 +525,30 @@ def generate_ai_response(message):
     }
     
     for keyword, response in responses.items():
-        if keyword in message:
+        if keyword in user_message:
             return response
     
-    return f'这是一个很好的问题！关于「{message}」，我可以为你提供一些学习建议。首先，你可以通过查阅相关资料来了解基础知识，然后通过实践来加深理解。如果有具体的问题，随时可以问我！'
+    return f'这是一个很好的问题！关于「{user_message}」，我可以为你提供一些学习建议。首先，你可以通过查阅相关资料来了解基础知识，然后通过实践来加深理解。如果有具体的问题，随时可以问我！'
+
+def generate_messages(message, context=None):
+    messages = []
+    
+    if context:
+        retrieved_texts = '\n'.join([f'- {chunk}' for chunk in context])
+        system_content = f"""你是一个聪明且严谨的私有知识库助手。
+请结合【参考资料】与你的逻辑推理能力，来回答用户的问题。
+如果用户的问题基于资料可以推导、计算或总结，请给出合理的推导结果（例如数学计算）。
+只有当用户问的问题与资料完全风马牛不相及、或者资料中找不到任何线索时，才回答'知识库中未找到相关内容'。
+
+参考资料：
+{retrieved_texts}"""
+        messages.append({'role': 'system', 'content': system_content})
+    else:
+        messages.append({'role': 'system', 'content': '你是一个专业的 AI 学习助手，帮助用户解答各种学习相关的问题。'})
+    
+    messages.append({'role': 'user', 'content': message})
+    
+    return messages
 
 @app.route('/api/sessions', methods=['GET'])
 @login_required
@@ -316,7 +615,18 @@ def chat():
     if not session_id:
         return jsonify({'success': False, 'error': 'session_id is required'}), 400
     
-    ai_response = generate_ai_response(message)
+    context = retrieve_knowledge(g.user_id, message, top_k=3)
+    if context:
+        print(f"✅ 检索到 {len(context)} 个相关文本块")
+        for i, chunk in enumerate(context):
+            print(f"  文本块 {i+1}: {chunk[:100]}...")
+    else:
+        print("ℹ️ 未找到用户的知识库索引，使用默认对话模式")
+    
+    messages = generate_messages(message, context)
+    print(f"📨 发送给大模型的 messages: {json.dumps(messages, ensure_ascii=False)}")
+    
+    ai_response = call_llm(messages)
     
     def generate():
         full_response = ""
@@ -687,6 +997,83 @@ def delete_user_account():
     except Exception as e:
         db.session.rollback()
         print(f"注销账号失败: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/knowledge/upload', methods=['POST'])
+@login_required
+def upload_knowledge():
+    try:
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': '未上传文件'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'success': False, 'error': '请选择文件'}), 400
+        
+        if not file.filename.lower().endswith('.pdf'):
+            return jsonify({'success': False, 'error': '仅支持 PDF 文件'}), 400
+        
+        print(f"开始处理 PDF 文件: {file.filename}, 用户ID: {g.user_id}")
+        
+        reader = PdfReader(file)
+        full_text = ""
+        for page in reader.pages:
+            text = page.extract_text()
+            if text:
+                full_text += text
+        
+        if not full_text.strip():
+            return jsonify({'success': False, 'error': '无法从 PDF 中提取文本'}), 400
+        
+        print(f"PDF 文本提取完成，总字符数: {len(full_text)}")
+        
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=500,
+            chunk_overlap=50,
+            length_function=len,
+        )
+        chunks = text_splitter.split_text(full_text)
+        
+        print(f"文本分块完成，共 {len(chunks)} 块")
+        
+        try:
+            model = get_embedding_model()
+        except RuntimeError as e:
+            print(f"模型加载失败: {e}")
+            return jsonify({'success': False, 'error': 'AI 向量化模型下载失败，请检查网络代理或稍后重试。'}), 500
+        
+        embeddings = model.encode(chunks)
+        
+        print(f"向量化完成，向量维度: {embeddings.shape}")
+        
+        dimension = embeddings.shape[1]
+        index = faiss.IndexFlatL2(dimension)
+        index.add(np.array(embeddings))
+        
+        user_id_str = str(g.user_id)
+        index_path = os.path.join(VECTOR_STORE_DIR, f'{user_id_str}.faiss')
+        chunks_path = os.path.join(VECTOR_STORE_DIR, f'{user_id_str}_chunks.json')
+        
+        faiss.write_index(index, index_path)
+        
+        with open(chunks_path, 'w', encoding='utf-8') as f:
+            json.dump(chunks, f, ensure_ascii=False)
+        
+        print(f"向量索引已保存: {index_path}")
+        print(f"文本块已保存: {chunks_path}")
+        
+        return jsonify({
+            'success': True,
+            'message': '知识库构建成功',
+            'chunks_count': len(chunks),
+            'file_name': file.filename,
+            'text_length': len(full_text)
+        })
+    
+    except Exception as e:
+        print(f"上传知识库失败: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':

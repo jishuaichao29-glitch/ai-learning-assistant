@@ -36,7 +36,7 @@ export default function Home() {
               </Link>
 
               <Link 
-                href="/profile"
+                href="/dashboard"
                 className={`px-8 py-4 rounded-full backdrop-blur-md font-semibold transition-all flex items-center space-x-2 ${
                   theme === 'dark' 
                     ? 'bg-white/5 border border-white/10 text-white hover:bg-white/10 hover:border-cyan-500/50' 
