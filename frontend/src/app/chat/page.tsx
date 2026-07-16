@@ -33,6 +33,7 @@ export default function ChatPage() {
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const currentSessionIdRef = useRef<string>('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { theme, toggleTheme } = useTheme();
   const { token, logout } = useAuth();
 
@@ -47,6 +48,25 @@ export default function ChatPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  const MIN_HEIGHT = 44;
+  const MAX_HEIGHT = 200;
+
+  const adjustTextareaHeight = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    textarea.style.height = 'auto';
+    
+    const scrollHeight = textarea.scrollHeight;
+    const newHeight = Math.min(Math.max(scrollHeight, MIN_HEIGHT), MAX_HEIGHT);
+    
+    textarea.style.height = `${newHeight}px`;
+  }, []);
+
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [input, adjustTextareaHeight]);
 
   const authHeaders = {
     'Authorization': `Bearer ${token}`,
@@ -510,24 +530,33 @@ export default function ChatPage() {
         <footer className="p-4 sm:p-6 backdrop-blur-md dark:bg-black/50 bg-white/80 dark:border-t border-gray-200">
           <div className="max-w-4xl mx-auto flex items-end space-x-3">
             <textarea
+              ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
-                  handleSend();
+                  if (!isLoading && input.trim()) {
+                    handleSend();
+                  }
                 }
               }}
-              placeholder="输入您的问题 (按 Enter 发送，Shift+Enter 换行)..."
-              className="flex-1 max-h-32 min-h-[50px] p-4 rounded-2xl dark:bg-neutral-900/80 bg-gray-100 dark:border border-gray-200 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none resize-none text-sm transition-all dark:text-white text-gray-900 placeholder:dark:text-neutral-500 placeholder:text-gray-400"
+              placeholder={isLoading ? 'AI 正在思考中，请稍候...' : '输入您的问题 (按 Enter 发送，Shift+Enter 换行)...'}
+              disabled={isLoading}
+              className={`flex-1 max-h-[${MAX_HEIGHT}px] min-h-[${MIN_HEIGHT}px] p-4 rounded-2xl dark:bg-neutral-900/80 bg-gray-100 dark:border border-gray-200 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none resize-none text-sm transition-all dark:text-white text-gray-900 placeholder:dark:text-neutral-500 placeholder:text-gray-400 disabled:dark:bg-neutral-950/80 disabled:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-70`}
               rows={1}
+              style={{ height: 'auto' }}
             />
             <button
               onClick={handleSend}
               disabled={!input.trim() || isLoading}
-              className="h-[50px] px-6 rounded-2xl bg-cyan-600 hover:bg-cyan-500 disabled:dark:bg-neutral-800 disabled:bg-gray-200 disabled:text-neutral-500 font-medium transition-colors flex items-center justify-center shrink-0 text-white"
+              className={`h-[${MIN_HEIGHT}px] px-6 rounded-2xl bg-cyan-600 hover:bg-cyan-500 disabled:dark:bg-neutral-800 disabled:bg-gray-200 disabled:text-neutral-500 font-medium transition-colors flex items-center justify-center shrink-0 text-white ${isLoading ? 'cursor-not-allowed' : ''}`}
             >
-              发送 🚀
+              {isLoading ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              ) : (
+                <span>发送 🚀</span>
+              )}
             </button>
           </div>
         </footer>
