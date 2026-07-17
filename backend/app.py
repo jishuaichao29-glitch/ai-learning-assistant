@@ -525,10 +525,13 @@ def call_llm(messages):
         traceback.print_exc()
         return "抱歉，网络连接异常，请稍后重试。"
 
-def generate_messages(message, context=None, history=None):
+def generate_messages(message, context=None, history=None, is_focus_mode=False):
     messages = []
     
-    if context:
+    if is_focus_mode:
+        focus_system_prompt = """你现在是'铁面无私的精英伴学教官'。用户正处于神圣的番茄钟专注学习时间内。你必须以极其严厉、绝对专业、精炼且充满鞭策感的语气进行回复。如果用户的提问与严肃的学习内容无关（例如要求讲笑话、聊八卦、寻求娱乐或试图偷懒），你必须予以驳回，无情戳穿并严厉命令其立刻回归学习主线！回答禁止废话，直击要害。"""
+        messages.append({'role': 'system', 'content': focus_system_prompt})
+    elif context:
         retrieved_texts = '\n'.join([f'- {chunk}' for chunk in context])
         system_content = f"""你是一个聪明且严谨的私有知识库助手。
 请结合【参考资料】与你的逻辑推理能力，来回答用户的问题。
@@ -668,7 +671,8 @@ def chat():
     message = data.get('message', '')
     session_id = data.get('session_id', '')
     use_rag = data.get('use_rag', True)
-    print(f'[Chat API] use_rag={use_rag}, type={type(use_rag)}')
+    is_focus_mode = data.get('is_focus_mode', False)
+    print(f'[Chat API] use_rag={use_rag}, type={type(use_rag)}, is_focus_mode={is_focus_mode}, type={type(is_focus_mode)}')
     
     if not session_id:
         return jsonify({'success': False, 'error': 'session_id is required'}), 400
@@ -708,7 +712,7 @@ def chat():
     else:
         print("🔄 闲聊模式 - 已熔断向量检索")
     
-    messages = generate_messages(message, context, history_list)
+    messages = generate_messages(message, context, history_list, is_focus_mode)
     print(f"📨 发送给大模型的 messages: {json.dumps(messages, ensure_ascii=False)}")
     
     def generate():
@@ -762,7 +766,7 @@ def chat():
                             data = json.loads(json_str)
                             if 'choices' in data and data['choices']:
                                 delta = data['choices'][0].get('delta', {})
-                                if 'content' in delta:
+                                if 'content' in delta and delta['content']:
                                     chunk = delta['content']
                                     full_response += chunk
                                     chunk_data = json.dumps({'chunk': chunk})
