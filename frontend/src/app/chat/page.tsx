@@ -7,7 +7,7 @@ import remarkGfm from 'remark-gfm';
 import { useTheme } from '../ThemeProvider';
 import { useAuth } from '../AuthProvider';
 import ProtectedRoute from '../ProtectedRoute';
-import { Copy, RefreshCw, Check, Star } from 'lucide-react';
+import { Copy, RefreshCw, Check, Star, Mic } from 'lucide-react';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -28,6 +28,8 @@ export default function ChatPage() {
   const [isWaiting, setIsWaiting] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string>('');
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [voiceSupported, setVoiceSupported] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadLoading, setUploadLoading] = useState(false);
@@ -75,6 +77,91 @@ export default function ChatPage() {
   useEffect(() => {
     adjustTextareaHeight();
   }, [input, adjustTextareaHeight]);
+
+  useEffect(() => {
+    const hasRecognition = 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window;
+    setVoiceSupported(hasRecognition);
+  }, []);
+
+  interface VoiceRecognitionResult {
+    isFinal: boolean;
+    [0]: { transcript: string };
+  }
+
+  interface VoiceRecognitionEvent {
+    resultIndex: number;
+    results: VoiceRecognitionResult[];
+  }
+
+  interface VoiceRecognitionErrorEvent {
+    error: string;
+  }
+
+  interface VoiceRecognition {
+    lang: string;
+    continuous: boolean;
+    interimResults: boolean;
+    onstart?: () => void;
+    onresult?: (event: VoiceRecognitionEvent) => void;
+    onerror?: (event: VoiceRecognitionErrorEvent) => void;
+    onend?: () => void;
+    start: () => void;
+    stop: () => void;
+  }
+
+  const toggleVoiceInput = useCallback(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    
+    if (!Recognition) {
+      alert('您的浏览器不支持语音识别功能，请使用 Chrome 或 Edge 浏览器');
+      return;
+    }
+
+    if (isRecording) {
+      setIsRecording(false);
+      return;
+    }
+
+    const recognition = new Recognition() as VoiceRecognition;
+    recognition.lang = 'zh-CN';
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    recognition.onstart = () => {
+      setIsRecording(true);
+      textareaRef.current?.focus();
+    };
+
+    recognition.onresult = (event: VoiceRecognitionEvent) => {
+      let transcript = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          transcript += event.results[i][0].transcript;
+        }
+      }
+      if (transcript) {
+        setInput(prev => prev + transcript);
+        setTimeout(() => textareaRef.current?.focus(), 0);
+      }
+    };
+
+    recognition.onerror = (event: VoiceRecognitionErrorEvent) => {
+      console.error('语音识别错误:', event.error);
+      setIsRecording(false);
+      if (event.error === 'not-allowed') {
+        alert('请允许麦克风权限以使用语音输入功能');
+      } else if (event.error === 'no-speech') {
+        console.log('未检测到语音');
+      }
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+    };
+
+    recognition.start();
+  }, [isRecording]);
 
   const authHeaders = {
     'Authorization': `Bearer ${token}`,
@@ -825,6 +912,20 @@ export default function ChatPage() {
               rows={1}
               style={{ height: 'auto' }}
             />
+            {voiceSupported && (
+              <button
+                onClick={toggleVoiceInput}
+                disabled={isLoading}
+                className={`h-[${MIN_HEIGHT}px] w-[${MIN_HEIGHT}px] rounded-2xl flex items-center justify-center shrink-0 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                  isRecording
+                    ? 'bg-red-500 text-white animate-pulse shadow-lg shadow-red-500/30'
+                    : 'dark:bg-white/5 bg-gray-100 hover:dark:bg-white/10 hover:bg-gray-200 dark:text-neutral-400 text-gray-500 dark:border border-gray-700 border-gray-200'
+                }`}
+                title={isRecording ? '点击停止录音' : '点击开始语音输入'}
+              >
+                <Mic className="w-5 h-5" />
+              </button>
+            )}
             <button
               onClick={isLoading ? () => abortControllerRef.current?.abort() : handleSend}
               disabled={!input.trim() && !isLoading}
