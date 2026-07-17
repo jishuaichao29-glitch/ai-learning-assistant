@@ -501,7 +501,7 @@ def call_llm(messages):
         traceback.print_exc()
         return f"抱歉，大模型调用失败：{str(e)}"
 
-def generate_messages(message, context=None):
+def generate_messages(message, context=None, history=None):
     messages = []
     
     if context:
@@ -516,6 +516,10 @@ def generate_messages(message, context=None):
         messages.append({'role': 'system', 'content': system_content})
     else:
         messages.append({'role': 'system', 'content': '你是一个无所不知、专业且充满亲和力的全科 AI 智能学习助手。你可以解答编程（如 Python/JavaScript）、科学、文学、历史、外语等任意领域的知识。请直接、高效地回答用户的问题，并用清晰的 Markdown 格式输出。'})
+    
+    if history:
+        for item in history:
+            messages.append({'role': item['role'], 'content': item['content']})
     
     messages.append({'role': 'user', 'content': message})
     
@@ -643,6 +647,23 @@ def chat():
     if not session_id:
         return jsonify({'success': False, 'error': 'session_id is required'}), 400
     
+    try:
+        chat_user_id = int(g.user_id)
+    except (ValueError, TypeError):
+        chat_user_id = g.user_id
+    
+    history = ChatHistory.query \
+        .filter_by(session_id=session_id, user_id=chat_user_id) \
+        .order_by(ChatHistory.timestamp.asc()) \
+        .limit(30) \
+        .all()
+    
+    history_list = []
+    if history:
+        print(f"📜 加载历史对话记录: {len(history)} 条")
+        for item in history:
+            history_list.append({'role': item.role, 'content': item.content})
+    
     context = retrieve_knowledge(g.user_id, message, top_k=3)
     if context:
         print(f"✅ 检索到 {len(context)} 个相关文本块")
@@ -651,7 +672,7 @@ def chat():
     else:
         print("ℹ️ 未找到用户的知识库索引，使用默认对话模式")
     
-    messages = generate_messages(message, context)
+    messages = generate_messages(message, context, history_list)
     print(f"📨 发送给大模型的 messages: {json.dumps(messages, ensure_ascii=False)}")
     
     ai_response = call_llm(messages)
