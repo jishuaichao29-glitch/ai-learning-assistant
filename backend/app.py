@@ -108,6 +108,8 @@ DATABASE_PATH = os.path.join(basedir, 'database.db')
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DATABASE_PATH}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production-2024'
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 OPENAI_API_BASE = os.environ.get('OPENAI_API_BASE', 'https://ark.cn-beijing.volces.com/api/v3')
@@ -486,7 +488,7 @@ def call_llm(messages):
             'Authorization': f'Bearer {OPENAI_API_KEY}'
         }
         
-        response = session.post(f"{OPENAI_API_BASE}/chat/completions", json=payload, headers=headers, timeout=60)
+        response = session.post(f"{OPENAI_API_BASE}/chat/completions", json=payload, headers=headers, timeout=120.0)
         response.raise_for_status()
         
         result = response.json()
@@ -496,10 +498,14 @@ def call_llm(messages):
         
         return "抱歉，我暂时无法回答这个问题。"
     
+    except requests.exceptions.Timeout:
+        print(f"大模型调用超时")
+        return "当前云端大脑思考过于剧烈导致网络超时，请您稍后重新点击【重新生成】按钮重试。"
+    
     except Exception as e:
         print(f"大模型调用失败: {e}")
         traceback.print_exc()
-        return f"抱歉，大模型调用失败：{str(e)}"
+        return "抱歉，网络连接异常，请稍后重试。"
 
 def generate_messages(message, context=None, history=None):
     messages = []
@@ -1051,6 +1057,8 @@ def delete_user_account():
 @app.route('/api/knowledge/upload', methods=['POST'])
 @login_required
 def upload_knowledge():
+    all_chunks = []
+    
     try:
         if 'file' not in request.files:
             return jsonify({'success': False, 'error': '未上传文件'}), 400
@@ -1062,68 +1070,120 @@ def upload_knowledge():
         if not file.filename.lower().endswith('.pdf'):
             return jsonify({'success': False, 'error': '仅支持 PDF 文件'}), 400
         
-        print(f"开始处理 PDF 文件: {file.filename}, 用户ID: {g.user_id}")
+        print(f"[PDF解析器] 开始处理 PDF 文件: {file.filename}, 用户ID: {g.user_id}")
         
-        reader = PdfReader(file)
-        full_text = ""
-        for page in reader.pages:
-            text = page.extract_text()
-            if text:
-                full_text += text
+        text_list = []
+        success_pages = 0
+        failed_pages = 0
         
-        if not full_text.strip():
-            return jsonify({'success': False, 'error': '无法从 PDF 中提取文本'}), 400
-        
-        print(f"PDF 文本提取完成，总字符数: {len(full_text)}")
+        try:
+            reader = PdfReader(file)
+            total_pages = len(reader.pages)
+            print(f"[PDF解析器] 开始解析大文件，总页数: {total_pages}")
+            
+            for idx, page in enumerate(reader.pages):
+                try:
+                    page_text = page.extract_text()
+                    if page_text and page_text.strip():
+                        cleaned_text = "".join(c for c in page_text if not (0xD800 <= ord(c) <= 0xDFFF))
+                        cleaned_text = cleaned_text.encode('utf-8', 'ignore').decode('utf-8', 'ignore')
+                        if cleaned_text and cleaned_text.strip():
+                            text_list.append(cleaned_text)
+                            success_pages += 1
+                        else:
+                            print(f"[PDF警告] 第 {idx + 1} 页清洗后为空，跳过")
+                    else:
+                        print(f"[PDF警告] 第 {idx + 1} 页为空，跳过")
+                except Exception as page_err:
+                    failed_pages += 1
+                    print(f"[PDF警告] 第 {idx + 1} 页提取失败，已安全跳过。原因: {page_err}")
+                    continue
+            
+            del reader
+            
+            print(f"[PDF解析器] 解析完成: 成功 {success_pages} 页, 失败 {failed_pages} 页")
+            
+            if not text_list:
+                print(f"[PDF错误] 所有页面均未提取到文本")
+                return jsonify({'success': False, 'error': '无法从 PDF 中提取文本'}), 400
+            
+            full_text = '\n\n'.join(text_list)
+            print(f"[PDF解析器] 文本提取完成，总字符数: {len(full_text)}")
+        except Exception as parse_err:
+            print(f"[PDF错误] PDF 阅读器初始化失败: {parse_err}")
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': f'PDF 解析失败: {str(parse_err)}'}), 500
         
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=500,
             chunk_overlap=50,
             length_function=len,
         )
-        chunks = text_splitter.split_text(full_text)
         
-        print(f"文本分块完成，共 {len(chunks)} 块")
+        all_chunks = text_splitter.split_text(full_text)
+        print(f"[PDF解析器] 文本分块完成，共 {len(all_chunks)} 块")
         
         try:
             model = get_embedding_model()
         except RuntimeError as e:
-            print(f"模型加载失败: {e}")
+            print(f"[PDF错误] 模型加载失败: {e}")
             return jsonify({'success': False, 'error': 'AI 向量化模型下载失败，请检查网络代理或稍后重试。'}), 500
         
-        embeddings = model.encode(chunks)
+        EMBEDDING_BATCH_SIZE = 20
+        index = None
         
-        print(f"向量化完成，向量维度: {embeddings.shape}")
-        
-        dimension = embeddings.shape[1]
-        index = faiss.IndexFlatL2(dimension)
-        index.add(np.array(embeddings))
+        for embed_start in range(0, len(all_chunks), EMBEDDING_BATCH_SIZE):
+            embed_end = min(embed_start + EMBEDDING_BATCH_SIZE, len(all_chunks))
+            batch_to_embed = all_chunks[embed_start:embed_end]
+            
+            try:
+                embeddings = model.encode(batch_to_embed)
+                
+                if index is None:
+                    dimension = embeddings.shape[1]
+                    index = faiss.IndexFlatL2(dimension)
+                
+                index.add(np.array(embeddings))
+                
+                user_id_str = str(g.user_id)
+                index_path = os.path.join(VECTOR_STORE_DIR, f'{user_id_str}.faiss')
+                chunks_path = os.path.join(VECTOR_STORE_DIR, f'{user_id_str}_chunks.json')
+                
+                faiss.write_index(index, index_path)
+                with open(chunks_path, 'w', encoding='utf-8') as f:
+                    json.dump(all_chunks[:embed_end], f, ensure_ascii=False)
+                
+                print(f"[PDF解析器] 增量保存: 已向量化 {embed_end}/{len(all_chunks)} 块")
+                
+                if embed_end < len(all_chunks):
+                    time.sleep(0.2)
+            except Exception as embed_err:
+                print(f"[PDF警告] 向量化批次 [{embed_start}-{embed_end}] 失败: {embed_err}")
+                traceback.print_exc()
+                continue
         
         user_id_str = str(g.user_id)
         index_path = os.path.join(VECTOR_STORE_DIR, f'{user_id_str}.faiss')
         chunks_path = os.path.join(VECTOR_STORE_DIR, f'{user_id_str}_chunks.json')
         
         faiss.write_index(index, index_path)
-        
         with open(chunks_path, 'w', encoding='utf-8') as f:
-            json.dump(chunks, f, ensure_ascii=False)
+            json.dump(all_chunks, f, ensure_ascii=False)
         
-        print(f"向量索引已保存: {index_path}")
-        print(f"文本块已保存: {chunks_path}")
+        print(f"✅ 知识库构建完成，共 {len(all_chunks)} 个文本块")
         
         return jsonify({
             'success': True,
             'message': '知识库构建成功',
-            'chunks_count': len(chunks),
+            'chunks_count': len(all_chunks),
             'file_name': file.filename,
-            'text_length': len(full_text)
+            'text_length': sum(len(chunk) for chunk in all_chunks)
         })
     
     except Exception as e:
-        print(f"上传知识库失败: {e}")
-        import traceback
+        print(f"[PDF解析器] 上传知识库失败: {e}")
         traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': f'处理失败: {str(e)}'}), 500
 
 if __name__ == '__main__':
     with app.app_context():
