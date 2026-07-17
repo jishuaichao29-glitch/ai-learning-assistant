@@ -681,47 +681,113 @@ def chat():
     messages = generate_messages(message, context, history_list)
     print(f"📨 发送给大模型的 messages: {json.dumps(messages, ensure_ascii=False)}")
     
-    ai_response = call_llm(messages)
-    
     def generate():
         full_response = ""
-        for char in ai_response:
-            full_response += char
-            chunk_data = json.dumps({'chunk': char})
-            yield f"data: {chunk_data}\n\n"
-            time.sleep(0.05)
-        
-        current_time = int(time.time())
         
         try:
-            try:
-                chat_user_id = int(g.user_id)
-            except (ValueError, TypeError):
-                chat_user_id = g.user_id
+            if not OPENAI_API_KEY:
+                ai_response = "抱歉，当前未配置大模型 API Key，请联系管理员配置后再试。"
+                for char in ai_response:
+                    full_response += char
+                    chunk_data = json.dumps({'chunk': char})
+                    yield f"data: {chunk_data}\n\n"
+                    time.sleep(0.05)
+                return
             
-            user_message = ChatHistory(
-                user_id=chat_user_id,
-                session_id=session_id,
-                role='user',
-                content=message,
-                timestamp=current_time - 1
-            )
-            db.session.add(user_message)
+            if not OPENAI_MODEL:
+                ai_response = "抱歉，当前未配置大模型推理接入点 ID，请联系管理员配置后再试。"
+                for char in ai_response:
+                    full_response += char
+                    chunk_data = json.dumps({'chunk': char})
+                    yield f"data: {chunk_data}\n\n"
+                    time.sleep(0.05)
+                return
             
-            assistant_message = ChatHistory(
-                user_id=chat_user_id,
-                session_id=session_id,
-                role='assistant',
-                content=ai_response,
-                timestamp=current_time
-            )
-            db.session.add(assistant_message)
-            db.session.commit()
-            print(f"消息已成功保存到数据库: user_id={chat_user_id}, type={type(chat_user_id)}, session_id={session_id}")
+            session_req = requests.Session()
+            session_req.trust_env = False
+            
+            payload = {
+                'model': OPENAI_MODEL,
+                'messages': messages,
+                'stream': True
+            }
+            
+            headers = {
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {OPENAI_API_KEY}'
+            }
+            
+            response = session_req.post(f"{OPENAI_API_BASE}/chat/completions", 
+                                       json=payload, headers=headers, timeout=120.0, stream=True)
+            response.raise_for_status()
+            
+            for line in response.iter_lines():
+                if line:
+                    line_str = line.decode('utf-8')
+                    if line_str.startswith('data: '):
+                        json_str = line_str[6:]
+                        if json_str.strip() == '[DONE]':
+                            break
+                        try:
+                            data = json.loads(json_str)
+                            if 'choices' in data and data['choices']:
+                                delta = data['choices'][0].get('delta', {})
+                                if 'content' in delta:
+                                    chunk = delta['content']
+                                    full_response += chunk
+                                    chunk_data = json.dumps({'chunk': chunk})
+                                    yield f"data: {chunk_data}\n\n"
+                        except Exception as e:
+                            continue
+            
+        except GeneratorExit:
+            print(f"⚠️ 前端中止请求，已生成 {len(full_response)} 个字符")
+        except requests.exceptions.Timeout:
+            full_response = "当前云端大脑思考过于剧烈导致网络超时，请您稍后重新点击【重新生成】按钮重试。"
+            for char in full_response:
+                chunk_data = json.dumps({'chunk': char})
+                yield f"data: {chunk_data}\n\n"
+                time.sleep(0.05)
         except Exception as e:
-            db.session.rollback()
-            print(f"保存消息到数据库失败: {e}")
-            raise
+            print(f"大模型调用失败: {e}")
+            traceback.print_exc()
+            full_response = "抱歉，网络连接异常，请稍后重试。"
+            for char in full_response:
+                chunk_data = json.dumps({'chunk': char})
+                yield f"data: {chunk_data}\n\n"
+                time.sleep(0.05)
+        finally:
+            if full_response.strip():
+                current_time = int(time.time())
+                
+                try:
+                    try:
+                        chat_user_id = int(g.user_id)
+                    except (ValueError, TypeError):
+                        chat_user_id = g.user_id
+                    
+                    user_message = ChatHistory(
+                        user_id=chat_user_id,
+                        session_id=session_id,
+                        role='user',
+                        content=message,
+                        timestamp=current_time - 1
+                    )
+                    db.session.add(user_message)
+                    
+                    assistant_message = ChatHistory(
+                        user_id=chat_user_id,
+                        session_id=session_id,
+                        role='assistant',
+                        content=full_response,
+                        timestamp=current_time
+                    )
+                    db.session.add(assistant_message)
+                    db.session.commit()
+                    print(f"消息已成功保存到数据库: user_id={chat_user_id}, type={type(chat_user_id)}, session_id={session_id}")
+                except Exception as e:
+                    db.session.rollback()
+                    print(f"保存消息到数据库失败: {e}")
         
         chunk_data = json.dumps({'chunk': '[END]'})
         yield f"data: {chunk_data}\n\n"
