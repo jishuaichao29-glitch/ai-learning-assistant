@@ -266,6 +266,24 @@ class ChatHistory(db.Model):
             'timestamp': self.timestamp
         }
 
+class FavoriteItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    session_id = db.Column(db.String(36), db.ForeignKey('session.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    timestamp = db.Column(db.Integer, nullable=False)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'session_id': self.session_id,
+            'user_id': self.user_id,
+            'title': self.title,
+            'content': self.content,
+            'timestamp': self.timestamp
+        }
+
 def base64url_encode(data):
     if isinstance(data, str):
         data = data.encode('utf-8')
@@ -815,15 +833,32 @@ def get_history():
         if not session_id:
             return jsonify({'success': False, 'error': 'session_id is required'}), 400
         
+        try:
+            user_id = int(g.user_id)
+        except (ValueError, TypeError):
+            user_id = g.user_id
+        
         history = ChatHistory.query.filter_by(
-            user_id=g.user_id,
+            user_id=user_id,
             session_id=session_id
         ).order_by(ChatHistory.timestamp.asc()).all()
-        user_history = [item.to_dict() for item in history]
+        
+        favorites = FavoriteItem.query.filter_by(
+            user_id=user_id
+        ).all()
+        favorited_contents = set()
+        for fav in favorites:
+            favorited_contents.add(fav.content)
+        
+        user_history = []
+        for item in history:
+            item_dict = item.to_dict()
+            item_dict['is_favorited'] = item.role == 'assistant' and item.content in favorited_contents
+            user_history.append(item_dict)
         
         if not user_history:
             welcome_message = ChatHistory(
-                user_id=g.user_id,
+                user_id=user_id,
                 session_id=session_id,
                 role='assistant',
                 content='你好！我是你的AI学习助手，很高兴为你服务！请问有什么我可以帮助你的吗？',
@@ -831,7 +866,7 @@ def get_history():
             )
             db.session.add(welcome_message)
             db.session.commit()
-            user_history = [welcome_message.to_dict()]
+            user_history = [{'id': welcome_message.id, 'user_id': user_id, 'session_id': session_id, 'role': 'assistant', 'content': welcome_message.content, 'timestamp': welcome_message.timestamp, 'is_favorited': False}]
         
         return jsonify({
             'success': True,
@@ -1130,6 +1165,116 @@ def delete_user_account():
     except Exception as e:
         db.session.rollback()
         print(f"注销账号失败: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/favorites', methods=['POST'])
+@login_required
+def add_favorite():
+    try:
+        data = request.get_json()
+        title = data.get('title', '')
+        content = data.get('content', '')
+        session_id = data.get('session_id', '')
+        
+        if not title or not content:
+            return jsonify({'success': False, 'error': '标题和内容不能为空'}), 400
+        
+        try:
+            user_id = int(g.user_id)
+        except (ValueError, TypeError):
+            user_id = g.user_id
+        
+        favorite = FavoriteItem(
+            session_id=session_id,
+            user_id=user_id,
+            title=title,
+            content=content,
+            timestamp=int(time.time())
+        )
+        
+        db.session.add(favorite)
+        db.session.commit()
+        
+        print(f"✅ 收藏已添加: {title[:30]}...")
+        return jsonify({'success': True, 'id': favorite.id})
+    except Exception as e:
+        db.session.rollback()
+        print(f"添加收藏失败: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/favorites', methods=['GET'])
+@login_required
+def get_favorites():
+    try:
+        try:
+            user_id = int(g.user_id)
+        except (ValueError, TypeError):
+            user_id = g.user_id
+        
+        favorites = FavoriteItem.query \
+            .filter_by(user_id=user_id) \
+            .order_by(FavoriteItem.timestamp.asc()) \
+            .all()
+        
+        result = [item.to_dict() for item in favorites]
+        print(f"📋 获取收藏列表: {len(result)} 条")
+        return jsonify({'success': True, 'data': result})
+    except Exception as e:
+        print(f"获取收藏列表失败: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/favorites', methods=['DELETE'])
+@login_required
+def delete_favorite_by_content():
+    try:
+        data = request.get_json()
+        content = data.get('content', '')
+        
+        if not content:
+            return jsonify({'success': False, 'error': 'content is required'}), 400
+        
+        try:
+            user_id = int(g.user_id)
+        except (ValueError, TypeError):
+            user_id = g.user_id
+        
+        favorite = FavoriteItem.query.filter_by(content=content, user_id=user_id).first()
+        
+        if not favorite:
+            return jsonify({'success': False, 'error': '收藏不存在'}), 404
+        
+        db.session.delete(favorite)
+        db.session.commit()
+        
+        print(f"🗑️ 收藏已删除 (按内容): {content[:30]}...")
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        print(f"删除收藏失败: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/favorites/<int:id>', methods=['DELETE'])
+@login_required
+def delete_favorite(id):
+    try:
+        try:
+            user_id = int(g.user_id)
+        except (ValueError, TypeError):
+            user_id = g.user_id
+        
+        favorite = FavoriteItem.query.filter_by(id=id, user_id=user_id).first()
+        
+        if not favorite:
+            return jsonify({'success': False, 'error': '收藏不存在'}), 404
+        
+        db.session.delete(favorite)
+        db.session.commit()
+        
+        print(f"🗑️ 收藏已删除: {id}")
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        print(f"删除收藏失败: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/knowledge/upload', methods=['POST'])

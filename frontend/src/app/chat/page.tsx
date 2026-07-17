@@ -7,11 +7,12 @@ import remarkGfm from 'remark-gfm';
 import { useTheme } from '../ThemeProvider';
 import { useAuth } from '../AuthProvider';
 import ProtectedRoute from '../ProtectedRoute';
-import { Copy, RefreshCw, Check } from 'lucide-react';
+import { Copy, RefreshCw, Check, Star } from 'lucide-react';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  is_favorited?: boolean;
 }
 
 interface Session {
@@ -78,6 +79,72 @@ export default function ChatPage() {
   const authHeaders = {
     'Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json'
+  };
+
+  const [showFavoriteToast, setShowFavoriteToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+
+  const handleFavorite = async (messageIndex: number) => {
+    const userMessage = messages[messageIndex - 1];
+    const assistantMessage = messages[messageIndex];
+    
+    if (!userMessage || !assistantMessage || userMessage.role !== 'user' || assistantMessage.role !== 'assistant') {
+      return;
+    }
+
+    const isCurrentlyFavorited = assistantMessage.is_favorited || false;
+
+    if (isCurrentlyFavorited) {
+      try {
+        const response = await fetch('http://127.0.0.1:5000/api/favorites', {
+          method: 'DELETE',
+          headers: authHeaders,
+          body: JSON.stringify({
+            content: assistantMessage.content
+          })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+          setMessages(prev => {
+            const newMessages = [...prev];
+            newMessages[messageIndex] = { ...newMessages[messageIndex], is_favorited: false };
+            return newMessages;
+          });
+          setToastMessage('已从知识卡片移除！');
+          setShowFavoriteToast(true);
+          setTimeout(() => setShowFavoriteToast(false), 2000);
+        }
+      } catch (error) {
+        console.error('取消收藏失败:', error);
+      }
+    } else {
+      try {
+        const response = await fetch('http://127.0.0.1:5000/api/favorites', {
+          method: 'POST',
+          headers: authHeaders,
+          body: JSON.stringify({
+            title: userMessage.content.substring(0, 100),
+            content: assistantMessage.content,
+            session_id: currentSessionIdRef.current
+          })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+          setMessages(prev => {
+            const newMessages = [...prev];
+            newMessages[messageIndex] = { ...newMessages[messageIndex], is_favorited: true };
+            return newMessages;
+          });
+          setToastMessage('已成功收入知识卡片！');
+          setShowFavoriteToast(true);
+          setTimeout(() => setShowFavoriteToast(false), 2000);
+        }
+      } catch (error) {
+        console.error('添加收藏失败:', error);
+      }
+    }
   };
 
   const fetchSessions = useCallback(async () => {
@@ -618,6 +685,13 @@ export default function ChatPage() {
             <span className="text-xs">上传 PDF 文档</span>
           </button>
           <Link
+            href="/notebook"
+            className="w-full py-2 rounded-xl dark:bg-amber-900/20 bg-amber-100 hover:dark:bg-amber-900/30 hover:bg-amber-200 dark:border border-amber-500/30 border-amber-300 text-amber-700 transition-colors flex items-center justify-center space-x-2"
+          >
+            <span>📂</span>
+            <span className="text-xs">知识卡片</span>
+          </Link>
+          <Link
             href="/profile"
             className="w-full py-2 rounded-xl dark:bg-purple-900/20 bg-purple-100 hover:dark:bg-purple-900/30 hover:bg-purple-200 dark:border border-purple-500/30 border-purple-300 text-purple-600 transition-colors flex items-center justify-center space-x-2"
           >
@@ -693,6 +767,14 @@ export default function ChatPage() {
                         title="重新生成"
                       >
                         <RefreshCw size={14} className={`dark:text-neutral-400 text-gray-500 ${isLoading ? 'animate-spin' : ''}`} />
+                      </button>
+                      <button
+                        onClick={() => handleFavorite(idx)}
+                        disabled={isLoading}
+                        className={`p-1.5 opacity-60 hover:opacity-100 rounded-lg hover:dark:bg-white/10 hover:bg-gray-200 transition-all disabled:opacity-30 disabled:cursor-not-allowed ${msg.is_favorited ? 'text-yellow-500' : ''}`}
+                        title={msg.is_favorited ? '点击取消收藏' : '收藏到知识卡片'}
+                      >
+                        <Star size={14} className={`${msg.is_favorited ? 'fill-yellow-500 text-yellow-500' : 'dark:text-neutral-400 text-gray-500'}`} />
                       </button>
                     </div>
                   )}
@@ -871,6 +953,15 @@ export default function ChatPage() {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+    )}
+
+    {showFavoriteToast && (
+      <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 animate-bounce">
+        <div className="px-6 py-3 bg-green-600 text-white rounded-full shadow-lg flex items-center space-x-2">
+          <Star className="w-5 h-5 fill-yellow-300 text-yellow-300" />
+          <span>{toastMessage}</span>
         </div>
       </div>
     )}
