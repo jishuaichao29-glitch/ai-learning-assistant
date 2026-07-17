@@ -1,3 +1,15 @@
+import os
+
+basedir = os.path.abspath(os.path.dirname(__file__))
+env_path = os.path.join(basedir, '.env')
+if os.path.exists(env_path):
+    with open(env_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, value = line.split('=', 1)
+                os.environ[key.strip()] = value.strip()
+
 from flask import Flask, request, jsonify, Response, stream_with_context, g
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
@@ -92,18 +104,21 @@ from sentence_transformers import SentenceTransformer
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True, methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
-basedir = os.path.abspath(os.path.dirname(__file__))
 DATABASE_PATH = os.path.join(basedir, 'database.db')
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DATABASE_PATH}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production-2024'
 
-LLM_API_KEY = os.environ.get('LLM_API_KEY', '')
-LLM_API_BASE = os.environ.get('LLM_API_BASE', 'https://open.bigmodel.cn/api/paas/v4/chat/completions')
-LLM_MODEL = os.environ.get('LLM_MODEL', 'glm-4-flash')
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+OPENAI_API_BASE = os.environ.get('OPENAI_API_BASE', 'https://ark.cn-beijing.volces.com/api/v3')
+
+# 【注意】火山引擎调用大模型时，model 参数需要填写具体的推理接入点 ID (Endpoint ID)
+# 通常是 ep- 或 ark- 开头的字符串，例如: ep-abc1234567890
+# 从 VOLC_MODEL_ENDPOINT 环境变量读取
+OPENAI_MODEL = os.environ.get('VOLC_MODEL_ENDPOINT', '')
 
 print(f"数据库连接路径: {DATABASE_PATH}")
-print(f"大模型配置 - API_BASE: {LLM_API_BASE}, MODEL: {LLM_MODEL}, API_KEY: {'已配置' if LLM_API_KEY else '未配置'}")
+print(f"大模型配置 - API_BASE: {OPENAI_API_BASE}, MODEL: {OPENAI_MODEL}, API_KEY: {'已配置' if OPENAI_API_KEY else '未配置'}")
 
 VECTOR_STORE_DIR = os.path.join(basedir, 'vector_store')
 if not os.path.exists(VECTOR_STORE_DIR):
@@ -450,25 +465,28 @@ def call_llm(messages):
         print()
     print("===== Messages 结束 =====")
     
-    if not LLM_API_KEY:
-        return generate_fallback_response(messages)
+    if not OPENAI_API_KEY:
+        return "抱歉，当前未配置大模型 API Key，请联系管理员配置后再试。"
+    
+    if not OPENAI_MODEL:
+        return "抱歉，当前未配置大模型推理接入点 ID (OPENAI_MODEL)，请联系管理员配置后再试。"
     
     try:
         session = requests.Session()
         session.trust_env = False
         
         payload = {
-            'model': LLM_MODEL,
+            'model': OPENAI_MODEL,
             'messages': messages,
             'stream': False
         }
         
         headers = {
             'Content-Type': 'application/json',
-            'Authorization': f'Bearer {LLM_API_KEY}'
+            'Authorization': f'Bearer {OPENAI_API_KEY}'
         }
         
-        response = session.post(LLM_API_BASE, json=payload, headers=headers, timeout=60)
+        response = session.post(f"{OPENAI_API_BASE}/chat/completions", json=payload, headers=headers, timeout=60)
         response.raise_for_status()
         
         result = response.json()
@@ -481,54 +499,7 @@ def call_llm(messages):
     except Exception as e:
         print(f"大模型调用失败: {e}")
         traceback.print_exc()
-        return generate_fallback_response(messages)
-
-def generate_fallback_response(messages):
-    system_content = ""
-    user_message = ""
-    
-    for msg in messages:
-        if msg['role'] == 'system':
-            system_content = msg['content']
-        elif msg['role'] == 'user':
-            user_message = msg['content']
-    
-    if '参考资料' in system_content:
-        import re
-        match = re.search(r'参考资料：\n(.+)', system_content, re.DOTALL)
-        if match:
-            reference_text = match.group(1).strip()
-            
-            cleaned_message = user_message.replace('？', '').replace('？', '')
-            
-            single_chars = re.findall(r'[\u4e00-\u9fa5]', cleaned_message)
-            keywords = []
-            for i in range(len(single_chars) - 1):
-                keywords.append(single_chars[i] + single_chars[i+1])
-            
-            if keywords:
-                for sentence in reference_text.split('\n'):
-                    if any(keyword in sentence for keyword in keywords):
-                        return sentence
-            
-            return '知识库中未找到相关内容'
-    
-    responses = {
-        '你好': '你好呀！😊 很高兴见到你！',
-        '你是谁': '我是你的AI学习助手，专门帮助你解答各种问题！',
-        '谢谢': '不客气！有任何问题随时来找我！',
-        '再见': '再见！祝你学习进步！👋',
-        '学习': '学习是一件很棒的事情！你想学习哪方面的知识呢？',
-        '编程': '编程很有趣！你想学习哪种编程语言？Python、JavaScript还是其他？',
-        '数学': '数学是科学的基础！有什么数学问题我可以帮你解答吗？',
-        '英语': '英语学习需要坚持！你可以每天背单词、看英文电影来提高！',
-    }
-    
-    for keyword, response in responses.items():
-        if keyword in user_message:
-            return response
-    
-    return f'这是一个很好的问题！关于「{user_message}」，我可以为你提供一些学习建议。首先，你可以通过查阅相关资料来了解基础知识，然后通过实践来加深理解。如果有具体的问题，随时可以问我！'
+        return f"抱歉，大模型调用失败：{str(e)}"
 
 def generate_messages(message, context=None):
     messages = []
@@ -544,7 +515,7 @@ def generate_messages(message, context=None):
 {retrieved_texts}"""
         messages.append({'role': 'system', 'content': system_content})
     else:
-        messages.append({'role': 'system', 'content': '你是一个专业的 AI 学习助手，帮助用户解答各种学习相关的问题。'})
+        messages.append({'role': 'system', 'content': '你是一个无所不知、专业且充满亲和力的全科 AI 智能学习助手。你可以解答编程（如 Python/JavaScript）、科学、文学、历史、外语等任意领域的知识。请直接、高效地回答用户的问题，并用清晰的 Markdown 格式输出。'})
     
     messages.append({'role': 'user', 'content': message})
     
@@ -585,6 +556,63 @@ def create_session():
         db.session.rollback()
         print(f"创建会话失败: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/chat/generate_title', methods=['POST'])
+@login_required
+def generate_title():
+    data = request.get_json()
+    content = data.get('content', '')
+    session_id = data.get('session_id', '')
+    
+    if not session_id or not content:
+        return jsonify({'success': False, 'error': 'session_id and content are required'}), 400
+    
+    try:
+        session = Session.query.filter_by(id=session_id, user_id=g.user_id).first()
+        if not session:
+            return jsonify({'success': False, 'error': '会话不存在'}), 404
+        
+        prompt = f"请将以下用户的原始提问精炼成 4-6 个字的简体中文标题。只输出标题本身，绝不要标点符号、绝不要任何解释和前缀。用户提问：{content}"
+        
+        messages = [
+            {'role': 'system', 'content': '你是一个专业的标题生成助手。'},
+            {'role': 'user', 'content': prompt}
+        ]
+        
+        title = call_llm(messages)
+        title = title.strip()
+        title = title.replace('，', '').replace('。', '').replace('、', '').replace('：', '')
+        
+        if len(title) > 10:
+            title = title[:10]
+        
+        error_keywords = ['失败', '报错', 'Error', 'error', '错误', '无法', '抱歉']
+        if any(keyword in title for keyword in error_keywords):
+            safe_title = content[:6] + '...'
+            print(f"⚠️ 大模型返回错误标题，已降级处理: '{title}' -> '{safe_title}'")
+            title = safe_title
+        
+        session.title = title
+        db.session.commit()
+        
+        print(f"✅ 会话标题已更新: {session_id} -> '{title}'")
+        
+        return jsonify({'success': True, 'title': title})
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"=== 标题生成报错详情 ===: {str(e)}")
+        traceback.print_exc()
+        
+        safe_title = content[:6] + '...'
+        print(f"⚠️ 标题生成异常，已降级处理: '{safe_title}'")
+        
+        session = Session.query.filter_by(id=session_id, user_id=g.user_id).first()
+        if session:
+            session.title = safe_title
+            db.session.commit()
+        
+        return jsonify({'success': True, 'title': safe_title})
 
 @app.route('/api/sessions/<session_id>', methods=['DELETE'])
 @login_required
