@@ -35,6 +35,12 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const currentSessionIdRef = useRef<string>('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const [useRag, setUseRag] = useState(true);
+  const useRagRef = useRef(useRag);
+  useEffect(() => {
+    useRagRef.current = useRag;
+  }, [useRag]);
   const { theme, toggleTheme } = useTheme();
   const { token, logout } = useAuth();
 
@@ -175,11 +181,14 @@ export default function ChatPage() {
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
     setIsLoading(true);
 
+    abortControllerRef.current = new AbortController();
+
     try {
       const response = await fetch('http://127.0.0.1:5000/api/chat', {
         method: 'POST',
         headers: authHeaders,
-        body: JSON.stringify({ message: userMessage, session_id: currentSessionIdRef.current }),
+        body: JSON.stringify({ message: userMessage, session_id: currentSessionIdRef.current, use_rag: useRag }),
+        signal: abortControllerRef.current.signal,
       });
 
       if (!response.ok) throw new Error('网络请求失败');
@@ -240,14 +249,45 @@ export default function ChatPage() {
         }
       }
     } catch (error) {
-      console.error("Error calling chat API:", error);
-      setMessages(prev => [...prev, { role: 'assistant', content: '抱歉，服务器开小差了，请稍后再试。' }]);
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        console.log('Request aborted by user');
+      } else {
+        console.error("Error calling chat API:", error);
+        setMessages(prev => [...prev, { role: 'assistant', content: '抱歉，服务器开小差了，请稍后再试。' }]);
+      }
     } finally {
+      abortControllerRef.current = null;
       setIsLoading(false);
+      
+      const shouldGenerateTitle = messages.length <= 1;
+      const currentSession = sessions.find(s => s.id === currentSessionId);
+      const isDefaultTitle = currentSession && (currentSession.title === '新对话' || currentSession.title === 'New Chat');
+      
+      if (shouldGenerateTitle && isDefaultTitle && currentSessionIdRef.current) {
+        fetch('http://127.0.0.1:5000/api/chat/generate_title', {
+          method: 'POST',
+          headers: authHeaders,
+          body: JSON.stringify({ 
+            content: userMessage, 
+            session_id: currentSessionIdRef.current 
+          }),
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success && data.title) {
+            setSessions(prev => prev.map(s => 
+              s.id === currentSessionIdRef.current 
+                ? { ...s, title: data.title }
+                : s
+            ));
+          }
+        })
+        .catch(err => console.error('Error generating title:', err));
+      }
     }
   };
 
-  const handleRegenerate = async (messageIndex: number) => {
+  const handleRegenerate = useCallback(async (messageIndex: number) => {
     if (isLoading) return;
 
     const userMessage = messages[messageIndex - 1];
@@ -258,13 +298,21 @@ export default function ChatPage() {
       newMessages[messageIndex] = { role: 'assistant', content: '' };
       return newMessages;
     });
+
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setIsLoading(true);
 
     try {
+      const currentUseRag = useRagRef.current;
+      console.log(`[Regenerate] use_rag: ${currentUseRag}`);
+      
       const response = await fetch('http://127.0.0.1:5000/api/chat', {
         method: 'POST',
         headers: authHeaders,
-        body: JSON.stringify({ message: userMessage.content, session_id: currentSessionIdRef.current }),
+        body: JSON.stringify({ message: userMessage.content, session_id: currentSessionIdRef.current, use_rag: currentUseRag }),
+        signal: controller.signal,
       });
 
       if (!response.ok) throw new Error('网络请求失败');
@@ -318,16 +366,21 @@ export default function ChatPage() {
         }
       }
     } catch (error) {
-      console.error("Error calling chat API:", error);
-      setMessages(prev => {
-        const newMessages = [...prev];
-        newMessages[messageIndex] = { role: 'assistant', content: '抱歉，服务器开小差了，请稍后再试。' };
-        return newMessages;
-      });
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        console.log('Regenerate request aborted by user');
+      } else {
+        console.error("Error calling chat API:", error);
+        setMessages(prev => {
+          const newMessages = [...prev];
+          newMessages[messageIndex] = { role: 'assistant', content: '抱歉，服务器开小差了，请稍后再试。' };
+          return newMessages;
+        });
+      }
     } finally {
+      abortControllerRef.current = null;
       setIsLoading(false);
     }
-  };
+  }, [isLoading]);
 
   const handleClearHistory = async () => {
     if (confirm('确定要清空当前对话的所有记忆吗？此操作不可恢复。')) {
@@ -661,6 +714,17 @@ export default function ChatPage() {
 
         <footer className="p-4 sm:p-6 backdrop-blur-md dark:bg-black/50 bg-white/80 dark:border-t border-gray-200">
           <div className="max-w-4xl mx-auto flex items-end space-x-3">
+            <button
+              onClick={() => setUseRag(!useRag)}
+              className={`shrink-0 px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center space-x-2 ${
+                useRag 
+                  ? 'bg-cyan-600 text-white shadow-md' 
+                  : 'dark:bg-white/5 bg-gray-100 dark:text-neutral-400 text-gray-500 dark:border border-gray-700 border-gray-200'
+              }`}
+            >
+              <span className={`w-4 h-4 rounded-full ${useRag ? 'bg-white' : 'bg-gray-300'}`}></span>
+              <span>检索上传文档</span>
+            </button>
             <textarea
               ref={textareaRef}
               value={input}
@@ -680,12 +744,16 @@ export default function ChatPage() {
               style={{ height: 'auto' }}
             />
             <button
-              onClick={handleSend}
-              disabled={!input.trim() || isLoading}
-              className={`h-[${MIN_HEIGHT}px] px-6 rounded-2xl bg-cyan-600 hover:bg-cyan-500 disabled:dark:bg-neutral-800 disabled:bg-gray-200 disabled:text-neutral-500 font-medium transition-colors flex items-center justify-center shrink-0 text-white ${isLoading ? 'cursor-not-allowed' : ''}`}
+              onClick={isLoading ? () => abortControllerRef.current?.abort() : handleSend}
+              disabled={!input.trim() && !isLoading}
+              className={`h-[${MIN_HEIGHT}px] px-6 rounded-2xl font-medium transition-colors flex items-center justify-center shrink-0 ${
+                isLoading 
+                  ? 'bg-red-500 hover:bg-red-400 text-white' 
+                  : 'bg-cyan-600 hover:bg-cyan-500 disabled:dark:bg-neutral-800 disabled:bg-gray-200 disabled:text-neutral-500 text-white'
+              }`}
             >
               {isLoading ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                <span>停止 ⏹️</span>
               ) : (
                 <span>发送 🚀</span>
               )}

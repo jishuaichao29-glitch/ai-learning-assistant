@@ -649,6 +649,8 @@ def chat():
     data = request.get_json()
     message = data.get('message', '')
     session_id = data.get('session_id', '')
+    use_rag = data.get('use_rag', True)
+    print(f'[Chat API] use_rag={use_rag}, type={type(use_rag)}')
     
     if not session_id:
         return jsonify({'success': False, 'error': 'session_id is required'}), 400
@@ -669,14 +671,24 @@ def chat():
         print(f"📜 加载历史对话记录: {len(history)} 条")
         for item in history:
             history_list.append({'role': item.role, 'content': item.content})
+        
+        if len(history_list) >= 2 and history_list[-1]['role'] == 'assistant':
+            last_assistant_content = history_list[-1]['content']
+            if '知识库中未找到' in last_assistant_content:
+                history_list = history_list[:-1]
+                print(f"🧹 过滤掉历史中失败的助手回复")
     
-    context = retrieve_knowledge(g.user_id, message, top_k=3)
-    if context:
-        print(f"✅ 检索到 {len(context)} 个相关文本块")
-        for i, chunk in enumerate(context):
-            print(f"  文本块 {i+1}: {chunk[:100]}...")
+    context = None
+    if use_rag:
+        context = retrieve_knowledge(g.user_id, message, top_k=3)
+        if context:
+            print(f"✅ RAG模式 - 检索到 {len(context)} 个相关文本块")
+            for i, chunk in enumerate(context):
+                print(f"  文本块 {i+1}: {chunk[:100]}...")
+        else:
+            print("ℹ️ RAG模式 - 未找到用户的知识库索引")
     else:
-        print("ℹ️ 未找到用户的知识库索引，使用默认对话模式")
+        print("🔄 闲聊模式 - 已熔断向量检索")
     
     messages = generate_messages(message, context, history_list)
     print(f"📨 发送给大模型的 messages: {json.dumps(messages, ensure_ascii=False)}")
