@@ -7,6 +7,7 @@ import remarkGfm from 'remark-gfm';
 import { useTheme } from '../ThemeProvider';
 import { useAuth } from '../AuthProvider';
 import ProtectedRoute from '../ProtectedRoute';
+import { Copy, RefreshCw, Check } from 'lucide-react';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -246,6 +247,88 @@ export default function ChatPage() {
     }
   };
 
+  const handleRegenerate = async (messageIndex: number) => {
+    if (isLoading) return;
+
+    const userMessage = messages[messageIndex - 1];
+    if (!userMessage || userMessage.role !== 'user') return;
+
+    setMessages(prev => {
+      const newMessages = [...prev];
+      newMessages[messageIndex] = { role: 'assistant', content: '' };
+      return newMessages;
+    });
+    setIsLoading(true);
+
+    try {
+      const response = await fetch('http://127.0.0.1:5000/api/chat', {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({ message: userMessage.content, session_id: currentSessionIdRef.current }),
+      });
+
+      if (!response.ok) throw new Error('网络请求失败');
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let firstChunk = true;
+
+      while (reader) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const messagesList = buffer.split('\n\n');
+        
+        for (let i = 0; i < messagesList.length - 1; i++) {
+          const msg = messagesList[i];
+          if (msg.startsWith('data: ')) {
+            const jsonStr = msg.substring(6);
+            try {
+              const data = JSON.parse(jsonStr);
+              const chunk = data.chunk;
+              
+              if (chunk === '[END]') {
+                break;
+              }
+
+              if (firstChunk) {
+                firstChunk = false;
+              }
+
+              setMessages(prev => {
+                const newMessages = [...prev];
+                newMessages[messageIndex] = {
+                  ...newMessages[messageIndex],
+                  content: newMessages[messageIndex].content + chunk,
+                };
+                return newMessages;
+              });
+            } catch (e) {
+              console.error('Error parsing SSE data:', e);
+            }
+          }
+        }
+        
+        buffer = messagesList[messagesList.length - 1];
+        
+        if (messagesList.some(m => m.includes('[END]'))) {
+          break;
+        }
+      }
+    } catch (error) {
+      console.error("Error calling chat API:", error);
+      setMessages(prev => {
+        const newMessages = [...prev];
+        newMessages[messageIndex] = { role: 'assistant', content: '抱歉，服务器开小差了，请稍后再试。' };
+        return newMessages;
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleClearHistory = async () => {
     if (confirm('确定要清空当前对话的所有记忆吗？此操作不可恢复。')) {
       try {
@@ -344,6 +427,34 @@ export default function ChatPage() {
     setUploadSuccess(false);
   };
 
+  const CopyButton = ({ text, size = 16, className = '' }: { text: string; size?: number; className?: string }) => {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = async () => {
+      try {
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch (err) {
+        console.error('Copy failed:', err);
+      }
+    };
+
+    return (
+      <button
+        onClick={handleCopy}
+        className={`flex items-center justify-center rounded-lg transition-all hover:dark:bg-white/10 hover:bg-gray-200 ${className}`}
+        title={copied ? '已复制' : '复制'}
+      >
+        {copied ? (
+          <Check size={size} className="text-green-500" />
+        ) : (
+          <Copy size={size} className="dark:text-neutral-400 text-gray-500" />
+        )}
+      </button>
+    );
+  };
+
   const markdownComponents = {
     p: ({ children }: { children?: React.ReactNode }) => (
       <p className="mb-2 last:mb-0">{children}</p>
@@ -366,11 +477,18 @@ export default function ChatPage() {
     ),
     code: ({ className, children }: { className?: string; children?: React.ReactNode }) => {
       const match = className?.match(/language-(\w+)/);
+      const codeText = String(children).replace(/\n$/, '');
+      
       if (match) {
         return (
-          <pre className="dark:bg-neutral-900/80 bg-gray-100 rounded-lg p-3 text-xs font-mono overflow-x-auto mb-2 last:mb-0 dark:border border-gray-200">
-            <code className="dark:text-neutral-300 text-gray-800">{String(children).replace(/\n$/, '')}</code>
-          </pre>
+          <div className="relative mb-2 last:mb-0">
+            <pre className="dark:bg-neutral-900/80 bg-gray-100 rounded-lg p-3 text-xs font-mono overflow-x-auto dark:border border-gray-200">
+              <code className="dark:text-neutral-300 text-gray-800">{codeText}</code>
+            </pre>
+            <div className="absolute top-2 right-2">
+              <CopyButton text={codeText} size={14} className="p-1.5 dark:bg-neutral-900/80 bg-white/80 shadow-sm opacity-60 hover:opacity-100 transition-all" />
+            </div>
+          </div>
         );
       }
       return (
@@ -500,7 +618,7 @@ export default function ChatPage() {
                   msg.role === 'user' 
                     ? 'bg-gradient-to-br from-cyan-600 to-blue-600 text-white shadow-lg' 
                     : 'backdrop-blur-md dark:bg-white/5 bg-gray-100 dark:border border-gray-200 text-gray-800 dark:text-neutral-200'
-                }`}>
+                } relative group`}>
                   {msg.role === 'user' ? (
                     <span className="whitespace-pre-wrap">{msg.content}</span>
                   ) : (
@@ -510,6 +628,20 @@ export default function ChatPage() {
                     >
                       {msg.content}
                     </ReactMarkdown>
+                  )}
+                  
+                  {msg.role === 'assistant' && (
+                    <div className="flex items-center space-x-1 mt-3 pt-3 border-t dark:border-gray-700 border-gray-200">
+                      <CopyButton text={msg.content} size={14} className="p-1.5 opacity-60 hover:opacity-100 hover:dark:bg-white/10 hover:bg-gray-200 rounded-lg transition-all" />
+                      <button
+                        onClick={() => handleRegenerate(idx)}
+                        disabled={isLoading}
+                        className="p-1.5 opacity-60 hover:opacity-100 rounded-lg hover:dark:bg-white/10 hover:bg-gray-200 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                        title="重新生成"
+                      >
+                        <RefreshCw size={14} className={`dark:text-neutral-400 text-gray-500 ${isLoading ? 'animate-spin' : ''}`} />
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
