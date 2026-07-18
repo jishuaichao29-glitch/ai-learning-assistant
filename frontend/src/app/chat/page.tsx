@@ -6,12 +6,17 @@ import MathAccordion from '../../components/MathAccordion';
 import { useTheme } from '../ThemeProvider';
 import { useAuth } from '../AuthProvider';
 import ProtectedRoute from '../ProtectedRoute';
-import { Copy, RefreshCw, Check, Star, Mic } from 'lucide-react';
+import { Copy, RefreshCw, Check, Star, Mic, ThumbsUp, ThumbsDown, Pencil } from 'lucide-react';
 
 interface Message {
+  id: string | number;
   role: 'user' | 'assistant' | 'breakpoint';
   content: string;
   is_favorited?: boolean;
+  feedback?: 'like' | 'dislike' | null;
+  is_editing?: boolean;
+  is_liked?: boolean;
+  is_disliked?: boolean;
 }
 
 interface Session {
@@ -26,6 +31,8 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [regeneratingId, setRegeneratingId] = useState<string | number | null>(null);
+  const [editingContent, setEditingContent] = useState<Record<number, string>>({});
   const [isWaiting, setIsWaiting] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string>('');
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -257,6 +264,179 @@ export default function ChatPage() {
     }
   };
 
+  const handleFeedback = async (messageIndex: number, feedbackType: 'like' | 'dislike') => {
+    const message = messages[messageIndex];
+    if (!message || message.role !== 'assistant') return;
+
+    setMessages(prev => {
+      const newMessages = [...prev];
+      const currentMsg = newMessages[messageIndex];
+      
+      if (feedbackType === 'like') {
+        newMessages[messageIndex] = { 
+          ...currentMsg, 
+          is_liked: !currentMsg.is_liked,
+          is_disliked: false
+        };
+      } else {
+        newMessages[messageIndex] = { 
+          ...currentMsg, 
+          is_disliked: !currentMsg.is_disliked,
+          is_liked: false
+        };
+      }
+      return newMessages;
+    });
+
+    try {
+      const response = await fetch(`http://127.0.0.1:5000/api/messages/${message.id}/feedback`, {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({ type: feedbackType })
+      });
+      
+      const data = await response.json();
+      if (!data.success) {
+        setMessages(prev => {
+          const newMessages = [...prev];
+          newMessages[messageIndex] = { 
+            ...newMessages[messageIndex], 
+            is_liked: data.is_liked || false,
+            is_disliked: data.is_disliked || false
+          };
+          return newMessages;
+        });
+      }
+    } catch (error) {
+      console.error('提交反馈失败:', error);
+    }
+  };
+
+  const handleEditMessage = (messageIndex: number) => {
+    const message = messages[messageIndex];
+    if (!message || message.role !== 'user') return;
+
+    setMessages(prev => {
+      const newMessages = [...prev];
+      newMessages[messageIndex] = { ...newMessages[messageIndex], is_editing: true };
+      return newMessages;
+    });
+  };
+
+  const handleCancelEdit = (messageIndex: number) => {
+    setMessages(prev => {
+      const newMessages = [...prev];
+      newMessages[messageIndex] = { ...newMessages[messageIndex], is_editing: false };
+      return newMessages;
+    });
+  };
+
+  const handleSaveAndResend = async (messageIndex: number, newContent: string) => {
+    if (!newContent.trim() || isLoading) return;
+
+    const truncatedMessages = messages.slice(0, messageIndex + 1);
+    
+    setMessages(prev => {
+      const newMessages = [...prev.slice(0, messageIndex + 1)];
+      newMessages[messageIndex] = { ...newMessages[messageIndex], content: newContent.trim(), is_editing: false };
+      return newMessages;
+    });
+
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    setIsLoading(true);
+
+    try {
+      const currentUseRag = useRagRef.current;
+      
+      const response = await fetch('http://127.0.0.1:5000/api/chat', {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({ 
+          message: newContent.trim(), 
+          session_id: currentSessionIdRef.current, 
+          use_rag: currentUseRag, 
+          is_focus_mode: false 
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) throw new Error('网络请求失败');
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      setMessages(prev => [...prev, { id: `msg-${Date.now()}`, role: 'assistant', content: '' }]);
+      const newMessageIndex = truncatedMessages.length;
+
+      while (reader) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const messagesList = buffer.split('\n\n');
+        
+        for (let i = 0; i < messagesList.length - 1; i++) {
+          const msg = messagesList[i];
+          if (msg.startsWith('data: ')) {
+            const jsonStr = msg.substring(6);
+            try {
+              const data = JSON.parse(jsonStr);
+              const chunk = data.chunk;
+              
+              if (chunk === '[END]') {
+                break;
+              }
+
+              if (data.message_id) {
+                setMessages(prev => {
+                  const newMessages = [...prev];
+                  newMessages[newMessageIndex] = {
+                    ...newMessages[newMessageIndex],
+                    id: data.message_id,
+                    is_liked: false,
+                    is_disliked: false,
+                  };
+                  return newMessages;
+                });
+                continue;
+              }
+
+              setMessages(prev => {
+                const newMessages = [...prev];
+                newMessages[newMessageIndex] = {
+                  ...newMessages[newMessageIndex],
+                  content: newMessages[newMessageIndex].content + chunk,
+                };
+                return newMessages;
+              });
+            } catch (e) {
+              console.error('Error parsing SSE data:', e);
+            }
+          }
+        }
+        
+        buffer = messagesList[messagesList.length - 1];
+        
+        if (messagesList.some(m => m.includes('[END]'))) {
+          break;
+        }
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        console.log('Edit request aborted by user');
+      } else {
+        console.error("Error calling chat API:", error);
+        setMessages(prev => [...prev, { id: `msg-${Date.now()}`, role: 'assistant', content: '抱歉，服务器开小差了，请稍后再试。' }]);
+      }
+    } finally {
+      abortControllerRef.current = null;
+      setIsLoading(false);
+    }
+  };
+
   const fetchSessions = useCallback(async () => {
     try {
       const response = await fetch('http://127.0.0.1:5000/api/sessions', {
@@ -360,10 +540,12 @@ export default function ChatPage() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
+      console.log("DEBUG FRONTEND FETCH - raw data:", data);
       if (data.history && data.history.length > 0) {
+        console.log("DEBUG FRONTEND FETCH - history (first 3):", data.history.slice(0, 3).map((msg: Message) => ({ id: msg.id, is_liked: msg.is_liked, is_disliked: msg.is_disliked })));
         setMessages(data.history);
       } else {
-        setMessages([{ role: 'assistant', content: '你好！我是你的智能学习助手。有什么我可以帮你的吗？' }]);
+        setMessages([{ id: 'msg-welcome', role: 'assistant', content: '你好！我是你的智能学习助手。有什么我可以帮你的吗？' }]);
       }
     } catch (err) {
       console.error("Error fetching history:", err);
@@ -385,7 +567,7 @@ export default function ChatPage() {
       const data = await response.json();
       if (data.session) {
         setCurrentSessionId(data.session.id);
-        setMessages([{ role: 'assistant', content: '你好！我是你的智能学习助手。有什么我可以帮你的吗？' }]);
+        setMessages([{ id: 'msg-welcome', role: 'assistant', content: '你好！我是你的智能学习助手。有什么我可以帮你的吗？' }]);
         fetchSessions();
       }
     } catch (err) {
@@ -472,7 +654,7 @@ export default function ChatPage() {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('chat_draft');
     }
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setMessages(prev => [...prev, { id: `msg-${Date.now()}-user`, role: 'user', content: userMessage }]);
     setIsLoading(true);
 
     abortControllerRef.current = new AbortController();
@@ -487,7 +669,7 @@ export default function ChatPage() {
 
       if (!response.ok) throw new Error('网络请求失败');
 
-      setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+      setMessages(prev => [...prev, { id: `msg-${Date.now()}-assistant`, role: 'assistant', content: '', is_liked: false, is_disliked: false }]);
       setIsWaiting(true);
 
       const reader = response.body?.getReader();
@@ -512,6 +694,23 @@ export default function ChatPage() {
               
               if (chunk === '[END]') {
                 break;
+              }
+
+              if (data.message_id) {
+                setMessages(prev => {
+                  const newMessages = [...prev];
+                  const lastMsg = newMessages[newMessages.length - 1];
+                  if (lastMsg && lastMsg.role === 'assistant') {
+                    newMessages[newMessages.length - 1] = {
+                      ...lastMsg,
+                      id: data.message_id,
+                      is_liked: false,
+                      is_disliked: false,
+                    };
+                  }
+                  return newMessages;
+                });
+                continue;
               }
 
               if (firstChunk) {
@@ -547,7 +746,7 @@ export default function ChatPage() {
         console.log('Request aborted by user');
       } else {
         console.error("Error calling chat API:", error);
-        setMessages(prev => [...prev, { role: 'assistant', content: '抱歉，服务器开小差了，请稍后再试。' }]);
+        setMessages(prev => [...prev, { id: `msg-${Date.now()}-error`, role: 'assistant', content: '抱歉，服务器开小差了，请稍后再试。' }]);
       }
     } finally {
       abortControllerRef.current = null;
@@ -582,14 +781,17 @@ export default function ChatPage() {
   };
 
   const handleRegenerate = useCallback(async (messageIndex: number) => {
-    if (isLoading) return;
+    if (isLoading || regeneratingId) return;
 
     const userMessage = messages[messageIndex - 1];
-    if (!userMessage || userMessage.role !== 'user') return;
+    const currentMessage = messages[messageIndex];
+    if (!userMessage || userMessage.role !== 'user' || !currentMessage) return;
+
+    setRegeneratingId(currentMessage.id);
 
     setMessages(prev => {
       const newMessages = [...prev];
-      newMessages[messageIndex] = { role: 'assistant', content: '' };
+      newMessages[messageIndex] = { ...newMessages[messageIndex], content: '' };
       return newMessages;
     });
 
@@ -635,6 +837,20 @@ export default function ChatPage() {
                 break;
               }
 
+              if (data.message_id) {
+                setMessages(prev => {
+                  const newMessages = [...prev];
+                  newMessages[messageIndex] = {
+                    ...newMessages[messageIndex],
+                    id: data.message_id,
+                    is_liked: false,
+                    is_disliked: false,
+                  };
+                  return newMessages;
+                });
+                continue;
+              }
+
               if (firstChunk) {
                 firstChunk = false;
               }
@@ -666,15 +882,16 @@ export default function ChatPage() {
         console.error("Error calling chat API:", error);
         setMessages(prev => {
           const newMessages = [...prev];
-          newMessages[messageIndex] = { role: 'assistant', content: '抱歉，服务器开小差了，请稍后再试。' };
+          newMessages[messageIndex] = { ...newMessages[messageIndex], content: '抱歉，服务器开小差了，请稍后再试。' };
           return newMessages;
         });
       }
     } finally {
       abortControllerRef.current = null;
       setIsLoading(false);
+      setRegeneratingId(null);
     }
-  }, [isLoading]);
+  }, [isLoading, regeneratingId, messages]);
 
   const handleClearHistory = async () => {
     if (confirm('确定要清空当前对话的所有记忆吗？此操作不可恢复。')) {
@@ -684,7 +901,7 @@ export default function ChatPage() {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (response.ok) {
-          setMessages([{ role: 'assistant', content: '记忆已清空，我们重新开始吧！' }]);
+          setMessages([{ id: 'msg-cleared', role: 'assistant', content: '记忆已清空，我们重新开始吧！' }]);
         } else {
           alert('清空失败，请稍后重试。');
         }
@@ -705,7 +922,7 @@ export default function ChatPage() {
       
       const data = await response.json();
       if (data.success) {
-        setMessages(prev => [...prev, { role: 'breakpoint', content: '' }]);
+        setMessages(prev => [...prev, { id: `msg-${Date.now()}-breakpoint`, role: 'breakpoint', content: '' }]);
         setToastMessage('上下文断点已插入，后续对话将轻装上阵！');
         setShowFavoriteToast(true);
         setTimeout(() => setShowFavoriteToast(false), 2000);
@@ -1097,22 +1314,74 @@ export default function ChatPage() {
                       ? 'bg-gradient-to-br from-cyan-600 to-blue-600 text-white shadow-lg' 
                       : 'backdrop-blur-md dark:bg-white/5 bg-gray-100 dark:border border-gray-200 text-gray-800 dark:text-neutral-200'
                   } relative group`}>
-                    {msg.role === 'user' ? (
-                      <span className="whitespace-pre-wrap">{msg.content}</span>
+                    {msg.role === 'user' && msg.is_editing ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={editingContent[idx] ?? msg.content}
+                          onChange={(e) => setEditingContent(prev => ({ ...prev, [idx]: e.target.value }))}
+                          className="w-full dark:bg-white/10 bg-gray-50 border dark:border-gray-600 border-gray-200 rounded-xl px-3 py-2 text-sm dark:text-white text-gray-900 focus:outline-none focus:dark:border-cyan-500 focus:border-cyan-400 resize-none"
+                          rows={3}
+                          ref={(el) => { if (el) el.focus(); }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && e.ctrlKey) {
+                              handleSaveAndResend(idx, editingContent[idx] ?? msg.content);
+                            }
+                          }}
+                        />
+                        <div className="flex justify-end space-x-2">
+                          <button
+                            onClick={() => handleCancelEdit(idx)}
+                            className="px-3 py-1.5 text-xs dark:bg-white/10 bg-gray-200 hover:dark:bg-white/20 hover:bg-gray-300 rounded-lg dark:text-neutral-300 text-gray-700 transition-colors"
+                          >
+                            取消
+                          </button>
+                          <button
+                            onClick={() => handleSaveAndResend(idx, editingContent[idx] ?? msg.content)}
+                            className="px-3 py-1.5 text-xs bg-cyan-600 hover:bg-cyan-500 rounded-lg text-white transition-colors"
+                          >
+                            保存并提交
+                          </button>
+                        </div>
+                      </div>
+                    ) : msg.role === 'user' ? (
+                      <>
+                        <span className="whitespace-pre-wrap">{msg.content}</span>
+                        <button
+                          onClick={() => handleEditMessage(idx)}
+                          className="absolute -top-1 -right-1 p-1 rounded-full dark:bg-white/10 bg-gray-200 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="编辑消息"
+                        >
+                          <Pencil size={12} className="dark:text-neutral-400 text-gray-600" />
+                        </button>
+                      </>
                     ) : (
                       <MathAccordion content={msg.content} />
                     )}
                   
-                    {msg.role === 'assistant' && (
+                    {msg.role === 'assistant' && !msg.is_editing && (
                       <div className="flex items-center space-x-1 mt-3 pt-3 border-t dark:border-gray-700 border-gray-200">
                         <CopyButton text={msg.content} size={14} className="p-1.5 opacity-60 hover:opacity-100 hover:dark:bg-white/10 hover:bg-gray-200 rounded-lg transition-all" />
                         <button
+                          onClick={() => handleFeedback(idx, 'like')}
+                          className={`p-1.5 rounded-lg transition-all ${msg.is_liked ? 'opacity-100 bg-green-100 dark:bg-green-900/30 text-green-500' : 'opacity-60 hover:opacity-100 hover:dark:bg-white/10 hover:bg-gray-200'}`}
+                          title="点赞"
+                        >
+                          <ThumbsUp size={14} className={`transition-all duration-200 ${msg.is_liked ? 'fill-green-500 text-green-500 scale-110' : 'dark:text-neutral-400 text-gray-500'}`} />
+                        </button>
+                        <button
+                          onClick={() => handleFeedback(idx, 'dislike')}
+                          className={`p-1.5 rounded-lg transition-all ${msg.is_disliked ? 'opacity-100 bg-red-100 dark:bg-red-900/30 text-red-500' : 'opacity-60 hover:opacity-100 hover:dark:bg-white/10 hover:bg-gray-200'}`}
+                          title="点踩"
+                        >
+                          <ThumbsDown size={14} className={`transition-all duration-200 ${msg.is_disliked ? 'fill-red-500 text-red-500 scale-110' : 'dark:text-neutral-400 text-gray-500'}`} />
+                        </button>
+                        <button
                           onClick={() => handleRegenerate(idx)}
-                          disabled={isLoading}
+                          disabled={!!regeneratingId}
                           className="p-1.5 opacity-60 hover:opacity-100 rounded-lg hover:dark:bg-white/10 hover:bg-gray-200 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                           title="重新生成"
                         >
-                          <RefreshCw size={14} className={`dark:text-neutral-400 text-gray-500 ${isLoading ? 'animate-spin' : ''}`} />
+                          <RefreshCw size={14} className={`dark:text-neutral-400 text-gray-500 ${msg.id === regeneratingId ? 'animate-spin' : ''}`} />
                         </button>
                         <button
                           onClick={() => handleFavorite(idx)}

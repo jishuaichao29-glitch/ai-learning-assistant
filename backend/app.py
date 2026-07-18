@@ -260,6 +260,7 @@ class ChatHistory(db.Model):
     content = db.Column(db.Text, nullable=False)
     timestamp = db.Column(db.Integer, nullable=False)
     is_focus_mode = db.Column(db.Boolean, default=False, nullable=False)
+    feedback = db.Column(db.String(10), nullable=True)
 
     def to_dict(self):
         return {
@@ -269,7 +270,8 @@ class ChatHistory(db.Model):
             'role': self.role,
             'content': self.content,
             'timestamp': self.timestamp,
-            'is_focus_mode': self.is_focus_mode
+            'is_focus_mode': self.is_focus_mode,
+            'feedback': self.feedback
         }
 
 class FavoriteItem(db.Model):
@@ -289,6 +291,18 @@ class FavoriteItem(db.Model):
             'content': self.content,
             'timestamp': self.timestamp
         }
+
+class LikedMessage(db.Model):
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    message_id = db.Column(db.Integer, db.ForeignKey('chat_history.id'), nullable=False)
+    created_at = db.Column(db.Integer, nullable=False)
+
+class DislikedMessage(db.Model):
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    message_id = db.Column(db.Integer, db.ForeignKey('chat_history.id'), nullable=False)
+    created_at = db.Column(db.Integer, nullable=False)
 
 def base64url_encode(data):
     if isinstance(data, str):
@@ -907,7 +921,9 @@ def chat():
                     )
                     db.session.add(assistant_message)
                     db.session.commit()
-                    print(f"消息已成功保存到数据库: user_id={chat_user_id}, type={type(chat_user_id)}, session_id={session_id}")
+                    print(f"消息已成功保存到数据库: user_id={chat_user_id}, type={type(chat_user_id)}, session_id={session_id}, assistant_id={assistant_message.id}")
+                    
+                    yield f"data: {json.dumps({'message_id': assistant_message.id})}\n\n"
                 except Exception as e:
                     db.session.rollback()
                     print(f"保存消息到数据库失败: {e}")
@@ -943,10 +959,18 @@ def get_history():
         for fav in favorites:
             favorited_contents.add(fav.content)
         
+        liked_messages = LikedMessage.query.filter_by(user_id=user_id).all()
+        liked_ids = {msg.message_id for msg in liked_messages}
+        
+        disliked_messages = DislikedMessage.query.filter_by(user_id=user_id).all()
+        disliked_ids = {msg.message_id for msg in disliked_messages}
+        
         user_history = []
         for item in history:
             item_dict = item.to_dict()
             item_dict['is_favorited'] = item.role == 'assistant' and item.content in favorited_contents
+            item_dict['is_liked'] = item.id in liked_ids
+            item_dict['is_disliked'] = item.id in disliked_ids
             user_history.append(item_dict)
         
         if not user_history:
@@ -959,7 +983,11 @@ def get_history():
             )
             db.session.add(welcome_message)
             db.session.commit()
-            user_history = [{'id': welcome_message.id, 'user_id': user_id, 'session_id': session_id, 'role': 'assistant', 'content': welcome_message.content, 'timestamp': welcome_message.timestamp, 'is_favorited': False}]
+            user_history = [{'id': welcome_message.id, 'user_id': user_id, 'session_id': session_id, 'role': 'assistant', 'content': welcome_message.content, 'timestamp': welcome_message.timestamp, 'is_focus_mode': False, 'feedback': None, 'is_favorited': False, 'is_liked': False, 'is_disliked': False}]
+        
+        print(f"DEBUG BACKEND RETURN - liked_ids: {liked_ids}")
+        print(f"DEBUG BACKEND RETURN - disliked_ids: {disliked_ids}")
+        print(f"DEBUG BACKEND RETURN - first 3 messages: {[(item['id'], item['is_liked'], item['is_disliked']) for item in user_history[:3]]}")
         
         return jsonify({
             'success': True,
@@ -1500,6 +1528,73 @@ def upload_knowledge():
         print(f"[PDF解析器] 上传知识库失败: {e}")
         traceback.print_exc()
         return jsonify({'success': False, 'error': f'处理失败: {str(e)}'}), 500
+
+@app.route('/api/messages/<int:message_id>/feedback', methods=['POST'])
+@login_required
+def message_feedback(message_id):
+    try:
+        data = request.get_json()
+        
+        feedback_type = data.get('type', data.get('feedback', None))
+        
+        try:
+            user_id = int(g.user_id)
+        except (ValueError, TypeError):
+            user_id = g.user_id
+        
+        message = ChatHistory.query.filter_by(id=message_id, user_id=user_id).first()
+        
+        if not message:
+            return jsonify({'success': False, 'error': '消息不存在'}), 404
+        
+        if feedback_type not in ('like', 'dislike'):
+            return jsonify({'success': False, 'error': '无效的反馈类型'}), 400
+        
+        current_liked = LikedMessage.query.filter_by(user_id=user_id, message_id=message_id).first()
+        current_disliked = DislikedMessage.query.filter_by(user_id=user_id, message_id=message_id).first()
+        
+        if feedback_type == 'like':
+            if current_liked:
+                db.session.delete(current_liked)
+                result_type = None
+            else:
+                new_like = LikedMessage(
+                    user_id=user_id,
+                    message_id=message_id,
+                    created_at=int(time.time())
+                )
+                db.session.add(new_like)
+                if current_disliked:
+                    db.session.delete(current_disliked)
+                result_type = 'like'
+        
+        elif feedback_type == 'dislike':
+            if current_disliked:
+                db.session.delete(current_disliked)
+                result_type = None
+            else:
+                new_dislike = DislikedMessage(
+                    user_id=user_id,
+                    message_id=message_id,
+                    created_at=int(time.time())
+                )
+                db.session.add(new_dislike)
+                if current_liked:
+                    db.session.delete(current_liked)
+                result_type = 'dislike'
+        
+        db.session.commit()
+        
+        print(f"✅ 消息 {message_id} 反馈已更新: {result_type}")
+        return jsonify({
+            'success': True,
+            'is_liked': result_type == 'like',
+            'is_disliked': result_type == 'dislike'
+        })
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ 提交反馈失败: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/search', methods=['GET'])
 @login_required
