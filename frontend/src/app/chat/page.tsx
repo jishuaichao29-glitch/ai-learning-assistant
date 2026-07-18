@@ -6,7 +6,7 @@ import MathAccordion from '../../components/MathAccordion';
 import { useTheme } from '../ThemeProvider';
 import { useAuth } from '../AuthProvider';
 import ProtectedRoute from '../ProtectedRoute';
-import { Copy, RefreshCw, Check, Star, Mic, ThumbsUp, ThumbsDown, Pencil } from 'lucide-react';
+import { Copy, RefreshCw, Check, Star, Mic, ThumbsUp, ThumbsDown, Pencil, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
 interface Message {
   id: string | number;
@@ -57,6 +57,7 @@ export default function ChatPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const slashCommands = [
     { trigger: '/总结', prompt: '请用 3 句话为我总结以下内容的重点：' },
@@ -1051,7 +1052,7 @@ export default function ChatPage() {
   return (
     <ProtectedRoute>
       <div className="flex h-screen dark:bg-neutral-950 bg-gray-50 font-sans">
-      <aside className="w-72 backdrop-blur-md dark:bg-black/30 bg-white/80 dark:border-r border-gray-200 flex flex-col shrink-0">
+      <aside className={`backdrop-blur-md dark:bg-black/30 bg-white/80 dark:border-r border-gray-200 flex flex-col shrink-0 transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'w-0 -translate-x-full opacity-0 overflow-hidden' : 'w-72 translate-x-0 opacity-100'}`}>
         <div className="p-4">
           <div className="relative">
             <input
@@ -1260,9 +1261,16 @@ export default function ChatPage() {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className="flex-1 flex flex-col min-w-0 transition-all duration-300">
         <header className="flex justify-between items-center px-6 py-4 backdrop-blur-md dark:bg-black/50 bg-white/80 dark:border-b border-gray-200 z-10 sticky top-0">
           <div className="flex items-center space-x-3">
+            <button
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              className="p-2 rounded-xl dark:bg-white/5 bg-gray-100 hover:dark:bg-white/10 hover:bg-gray-200 dark:border border-gray-700 border-gray-300 transition-all flex items-center justify-center"
+              title={isSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
+            >
+              {isSidebarCollapsed ? <PanelLeftOpen size={18} className="dark:text-white text-gray-700" /> : <PanelLeftClose size={18} className="dark:text-white text-gray-700" />}
+            </button>
             <div className="h-3 w-3 rounded-full bg-cyan-400 animate-pulse"></div>
             <h1 className="text-lg font-medium tracking-wide dark:text-white text-gray-900">AI Chat Room</h1>
           </div>
