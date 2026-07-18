@@ -239,13 +239,17 @@ class Session(db.Model):
     id = db.Column(db.String(36), primary_key=True)
     title = db.Column(db.String(100), nullable=False)
     created_at = db.Column(db.Integer, nullable=False)
+    updated_at = db.Column(db.Integer, nullable=False)
+    is_pinned = db.Column(db.Boolean, default=False, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
     def to_dict(self):
         return {
             'id': self.id,
             'title': self.title,
-            'created_at': self.created_at
+            'created_at': self.created_at,
+            'updated_at': self.updated_at,
+            'is_pinned': self.is_pinned
         }
 
 class ChatHistory(db.Model):
@@ -255,6 +259,7 @@ class ChatHistory(db.Model):
     role = db.Column(db.String(20), nullable=False)
     content = db.Column(db.Text, nullable=False)
     timestamp = db.Column(db.Integer, nullable=False)
+    is_focus_mode = db.Column(db.Boolean, default=False, nullable=False)
 
     def to_dict(self):
         return {
@@ -263,7 +268,8 @@ class ChatHistory(db.Model):
             'session_id': self.session_id,
             'role': self.role,
             'content': self.content,
-            'timestamp': self.timestamp
+            'timestamp': self.timestamp,
+            'is_focus_mode': self.is_focus_mode
         }
 
 class FavoriteItem(db.Model):
@@ -556,7 +562,7 @@ def generate_messages(message, context=None, history=None, is_focus_mode=False):
 @login_required
 def get_sessions():
     try:
-        sessions = Session.query.filter_by(user_id=g.user_id).order_by(Session.created_at.desc()).all()
+        sessions = Session.query.filter_by(user_id=g.user_id).order_by(Session.is_pinned.desc(), Session.updated_at.desc()).all()
         return jsonify({
             'success': True,
             'sessions': [session.to_dict() for session in sessions]
@@ -570,10 +576,12 @@ def get_sessions():
 def create_session():
     try:
         session_id = str(uuid.uuid4())
+        now = int(time.time())
         new_session = Session(
             id=session_id,
             title='新对话',
-            created_at=int(time.time()),
+            created_at=now,
+            updated_at=now,
             user_id=g.user_id
         )
         db.session.add(new_session)
@@ -645,6 +653,35 @@ def generate_title():
         
         return jsonify({'success': True, 'title': safe_title})
 
+@app.route('/api/sessions/<session_id>', methods=['PUT'])
+@login_required
+def update_session(session_id):
+    try:
+        data = request.get_json()
+        session = Session.query.filter_by(id=session_id, user_id=g.user_id).first()
+        
+        if not session:
+            return jsonify({'success': False, 'error': '会话不存在'}), 404
+        
+        if 'title' in data:
+            session.title = data['title']
+        
+        if 'is_pinned' in data:
+            session.is_pinned = bool(data['is_pinned'])
+        
+        session.updated_at = int(time.time())
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'session': session.to_dict()
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"更新会话失败: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/sessions/<session_id>', methods=['DELETE'])
 @login_required
 def delete_session(session_id):
@@ -690,8 +727,11 @@ def chat():
     
     history_list = []
     if history:
-        print(f"📜 加载历史对话记录: {len(history)} 条")
+        print(f"📜 加载历史对话记录: {len(history)} 条, 当前模式: {'专注' if is_focus_mode else '普通'}")
         for item in history:
+            if not is_focus_mode and item.is_focus_mode:
+                print(f"🧹 过滤掉专注模式下的历史消息")
+                continue
             history_list.append({'role': item.role, 'content': item.content})
         
         if len(history_list) >= 2 and history_list[-1]['role'] == 'assistant':
@@ -805,7 +845,8 @@ def chat():
                         session_id=session_id,
                         role='user',
                         content=message,
-                        timestamp=current_time - 1
+                        timestamp=current_time - 1,
+                        is_focus_mode=is_focus_mode
                     )
                     db.session.add(user_message)
                     
@@ -814,7 +855,8 @@ def chat():
                         session_id=session_id,
                         role='assistant',
                         content=full_response,
-                        timestamp=current_time
+                        timestamp=current_time,
+                        is_focus_mode=is_focus_mode
                     )
                     db.session.add(assistant_message)
                     db.session.commit()

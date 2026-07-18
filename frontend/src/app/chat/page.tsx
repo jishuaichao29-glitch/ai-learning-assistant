@@ -17,7 +17,9 @@ interface Message {
 interface Session {
   id: string;
   title: string;
-  created_at: string;
+  created_at: number;
+  updated_at: number;
+  is_pinned: boolean;
 }
 
 export default function ChatPage() {
@@ -40,6 +42,8 @@ export default function ChatPage() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const [useRag, setUseRag] = useState(true);
   const useRagRef = useRef(useRag);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState('');
   useEffect(() => {
     useRagRef.current = useRag;
   }, [useRag]);
@@ -332,6 +336,43 @@ export default function ChatPage() {
     } catch (err) {
       console.error("Error deleting session:", err);
       alert('删除失败，请检查网络连接。');
+    }
+  };
+
+  const updateSessionTitle = async (sessionId: string, newTitle: string) => {
+    try {
+      const response = await fetch(`http://127.0.0.1:5000/api/sessions/${sessionId}`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTitle })
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, title: newTitle } : s));
+      }
+    } catch (err) {
+      console.error("Error updating session title:", err);
+    }
+  };
+
+  const togglePinSession = async (sessionId: string) => {
+    try {
+      const session = sessions.find(s => s.id === sessionId);
+      if (!session) return;
+      
+      const response = await fetch(`http://127.0.0.1:5000/api/sessions/${sessionId}`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_pinned: !session.is_pinned })
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, is_pinned: !s.is_pinned } : s));
+      }
+    } catch (err) {
+      console.error("Error toggling pin:", err);
     }
   };
 
@@ -705,20 +746,80 @@ export default function ChatPage() {
             >
               <button
                 onClick={() => setCurrentSessionId(session.id)}
-                className="flex-1 text-left"
+                className="flex-1 text-left flex items-start gap-2 min-w-0"
               >
-                <div className="font-medium text-sm truncate dark:text-white text-gray-900">{session.title}</div>
-                <div className="text-xs dark:text-neutral-500 text-gray-500 mt-1">{formatDate(session.created_at)}</div>
+                {session.is_pinned && <span className="flex-shrink-0 text-amber-500">📌</span>}
+                <div className="flex-1 flex flex-col min-w-0">
+                  {editingSessionId === session.id ? (
+                    <input
+                      type="text"
+                      value={editingTitle}
+                      onChange={(e) => setEditingTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          updateSessionTitle(session.id, editingTitle.trim());
+                          setEditingSessionId(null);
+                          setEditingTitle('');
+                        } else if (e.key === 'Escape') {
+                          setEditingSessionId(null);
+                          setEditingTitle('');
+                        }
+                      }}
+                      onBlur={() => {
+                        if (editingTitle.trim()) {
+                          updateSessionTitle(session.id, editingTitle.trim());
+                        }
+                        setEditingSessionId(null);
+                        setEditingTitle('');
+                      }}
+                      className="text-sm dark:bg-white/10 bg-gray-100 border border-transparent dark:focus:border-cyan-500 focus:border-cyan-300 rounded-lg px-2 py-1 outline-none"
+                      autoFocus
+                    />
+                  ) : (
+                    <>
+                      <div className="font-medium text-sm truncate dark:text-white text-gray-900">{session.title}</div>
+                      <div className="text-xs flex-shrink-0 whitespace-nowrap dark:text-neutral-500 text-gray-500 mt-1">{formatDate(session.created_at)}</div>
+                    </>
+                  )}
+                </div>
               </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  deleteSession(session.id);
-                }}
-                className="ml-2 p-1.5 rounded-lg dark:hover:bg-red-900/30 hover:bg-red-100 dark:text-neutral-500 text-gray-400 dark:hover:text-red-400 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
-              >
-                🗑️
-              </button>
+              <div className="flex items-center space-x-1">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    togglePinSession(session.id);
+                  }}
+                  className={`ml-1 p-1.5 rounded-lg transition-colors ${
+                    session.is_pinned
+                      ? 'dark:bg-amber-900/30 bg-amber-100 dark:text-amber-400 text-amber-600'
+                      : 'dark:hover:bg-amber-900/30 hover:bg-amber-100 dark:text-neutral-500 text-gray-400 dark:hover:text-amber-400 hover:text-amber-600 opacity-0 group-hover:opacity-100'
+                  }`}
+                  title={session.is_pinned ? '取消置顶' : '置顶对话'}
+                >
+                  📌
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingSessionId(session.id);
+                    setEditingTitle(session.title);
+                  }}
+                  className="ml-1 p-1.5 rounded-lg dark:hover:bg-cyan-900/30 hover:bg-cyan-100 dark:text-neutral-500 text-gray-400 dark:hover:text-cyan-400 hover:text-cyan-600 transition-colors opacity-0 group-hover:opacity-100"
+                  title="修改标题"
+                >
+                  ✏️
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteSession(session.id);
+                  }}
+                  className="ml-1 p-1.5 rounded-lg dark:hover:bg-red-900/30 hover:bg-red-100 dark:text-neutral-500 text-gray-400 dark:hover:text-red-400 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                  title="删除对话"
+                >
+                  🗑️
+                </button>
+              </div>
             </div>
           ))}
         </div>
