@@ -9,7 +9,7 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, token, logout } = useAuth();
   const router = useRouter();
   const [isChecking, setIsChecking] = useState(true);
   const [hasRedirected, setHasRedirected] = useState(false);
@@ -22,24 +22,53 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     if (typeof window === 'undefined') return;
 
     const savedToken = localStorage.getItem('token');
-    setHasToken(!!savedToken);
     
-    if (savedToken) {
-      setIsChecking(false);
-      setHasRedirected(false);
-    } else if (isAuthenticated) {
-      setIsChecking(false);
-      setHasRedirected(false);
-    } else if (!hasRedirected) {
-      const timer = setTimeout(() => {
-        setIsChecking(false);
-        setHasRedirected(true);
-        router.push('/login');
-      }, 100);
-
-      return () => clearTimeout(timer);
+    if (!savedToken) {
+      setHasToken(false);
+      if (!hasRedirected) {
+        const timer = setTimeout(() => {
+          setIsChecking(false);
+          setHasRedirected(true);
+          router.push('/login');
+        }, 100);
+        return () => clearTimeout(timer);
+      }
+      return;
     }
-  }, [isAuthenticated, router, hasRedirected]);
+
+    setHasToken(true);
+
+    const validateToken = async () => {
+      try {
+        const response = await fetch('http://127.0.0.1:5000/api/user/info', {
+          headers: { 'Authorization': `Bearer ${savedToken}` }
+        });
+        
+        if (!response.ok) {
+          logout();
+          setHasToken(false);
+          if (!hasRedirected) {
+            setIsChecking(false);
+            setHasRedirected(true);
+            router.push('/login');
+          }
+        } else {
+          setIsChecking(false);
+          setHasRedirected(false);
+        }
+      } catch {
+        logout();
+        setHasToken(false);
+        if (!hasRedirected) {
+          setIsChecking(false);
+          setHasRedirected(true);
+          router.push('/login');
+        }
+      }
+    };
+
+    validateToken();
+  }, [isAuthenticated, router, hasRedirected, token, logout]);
 
   if (!mounted) {
     return (

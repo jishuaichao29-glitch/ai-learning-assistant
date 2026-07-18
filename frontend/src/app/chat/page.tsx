@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import MathAccordion from '../../components/MathAccordion';
 import { useTheme } from '../ThemeProvider';
 import { useAuth } from '../AuthProvider';
 import ProtectedRoute from '../ProtectedRoute';
@@ -50,6 +49,14 @@ export default function ChatPage() {
   useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
   }, [currentSessionId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const savedDraft = localStorage.getItem('chat_draft');
+    if (savedDraft && !input) {
+      setInput(savedDraft);
+    }
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -242,18 +249,19 @@ export default function ChatPage() {
       const data = await response.json();
       if (data.sessions && data.sessions.length > 0) {
         setSessions(data.sessions);
-        if (!currentSessionId) {
+        const currentSession = currentSessionIdRef.current;
+        if (!currentSession) {
           setCurrentSessionId(data.sessions[0].id);
         }
       }
     } catch (err) {
       console.error("Error fetching sessions:", err);
     }
-  }, [currentSessionId, token]);
+  }, [token]);
 
   useEffect(() => {
     fetchSessions();
-  }, [fetchSessions]);
+  }, [fetchSessions, token]);
 
   const fetchHistory = useCallback(async (sessionId: string) => {
     try {
@@ -332,6 +340,9 @@ export default function ChatPage() {
 
     const userMessage = input.trim();
     setInput('');
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('chat_draft');
+    }
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
     setIsLoading(true);
 
@@ -341,7 +352,7 @@ export default function ChatPage() {
       const response = await fetch('http://127.0.0.1:5000/api/chat', {
         method: 'POST',
         headers: authHeaders,
-        body: JSON.stringify({ message: userMessage, session_id: currentSessionIdRef.current, use_rag: useRag }),
+        body: JSON.stringify({ message: userMessage, session_id: currentSessionIdRef.current, use_rag: useRag, is_focus_mode: false }),
         signal: abortControllerRef.current.signal,
       });
 
@@ -465,7 +476,7 @@ export default function ChatPage() {
       const response = await fetch('http://127.0.0.1:5000/api/chat', {
         method: 'POST',
         headers: authHeaders,
-        body: JSON.stringify({ message: userMessage.content, session_id: currentSessionIdRef.current, use_rag: currentUseRag }),
+        body: JSON.stringify({ message: userMessage.content, session_id: currentSessionIdRef.current, use_rag: currentUseRag, is_focus_mode: false }),
         signal: controller.signal,
       });
 
@@ -662,50 +673,6 @@ export default function ChatPage() {
     );
   };
 
-  const markdownComponents = {
-    p: ({ children }: { children?: React.ReactNode }) => (
-      <p className="mb-2 last:mb-0">{children}</p>
-    ),
-    strong: ({ children }: { children?: React.ReactNode }) => (
-      <strong className="font-semibold text-cyan-500">{children}</strong>
-    ),
-    ul: ({ children }: { children?: React.ReactNode }) => (
-      <ul className="list-disc list-inside mb-2 last:mb-0 space-y-1">
-        {children}
-      </ul>
-    ),
-    ol: ({ children }: { children?: React.ReactNode }) => (
-      <ol className="list-decimal list-inside mb-2 last:mb-0 space-y-1">
-        {children}
-      </ol>
-    ),
-    li: ({ children }: { children?: React.ReactNode }) => (
-      <li className="text-sm">{children}</li>
-    ),
-    code: ({ className, children }: { className?: string; children?: React.ReactNode }) => {
-      const match = className?.match(/language-(\w+)/);
-      const codeText = String(children).replace(/\n$/, '');
-      
-      if (match) {
-        return (
-          <div className="relative mb-2 last:mb-0">
-            <pre className="dark:bg-neutral-900/80 bg-gray-100 rounded-lg p-3 text-xs font-mono overflow-x-auto dark:border border-gray-200">
-              <code className="dark:text-neutral-300 text-gray-800">{codeText}</code>
-            </pre>
-            <div className="absolute top-2 right-2">
-              <CopyButton text={codeText} size={14} className="p-1.5 dark:bg-neutral-900/80 bg-white/80 shadow-sm opacity-60 hover:opacity-100 transition-all" />
-            </div>
-          </div>
-        );
-      }
-      return (
-        <code className="px-1.5 py-0.5 rounded dark:bg-white/10 bg-cyan-100 dark:text-cyan-300 text-cyan-700 text-sm font-mono">
-          {children}
-        </code>
-      );
-    },
-  };
-
   const formatDate = (timestamp: number | string) => {
     const numTimestamp = typeof timestamp === 'string' ? parseInt(timestamp, 10) : timestamp;
     const date = new Date(numTimestamp * 1000);
@@ -779,6 +746,13 @@ export default function ChatPage() {
             <span className="text-xs">知识卡片</span>
           </Link>
           <Link
+            href="/focus"
+            className="w-full py-2 rounded-xl dark:bg-red-900/20 bg-red-50 hover:dark:bg-red-900/30 hover:bg-red-100 dark:border border-red-500/30 border-red-200 text-red-700 transition-colors flex items-center justify-center space-x-2"
+          >
+            <span>⏱️</span>
+            <span className="text-xs">专注空间</span>
+          </Link>
+          <Link
             href="/profile"
             className="w-full py-2 rounded-xl dark:bg-purple-900/20 bg-purple-100 hover:dark:bg-purple-900/30 hover:bg-purple-200 dark:border border-purple-500/30 border-purple-300 text-purple-600 transition-colors flex items-center justify-center space-x-2"
           >
@@ -836,12 +810,7 @@ export default function ChatPage() {
                   {msg.role === 'user' ? (
                     <span className="whitespace-pre-wrap">{msg.content}</span>
                   ) : (
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={markdownComponents}
-                    >
-                      {msg.content}
-                    </ReactMarkdown>
+                    <MathAccordion content={msg.content} />
                   )}
                   
                   {msg.role === 'assistant' && (
@@ -897,7 +866,13 @@ export default function ChatPage() {
             <textarea
               ref={textareaRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                const newValue = e.target.value;
+                setInput(newValue);
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem('chat_draft', newValue);
+                }
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();

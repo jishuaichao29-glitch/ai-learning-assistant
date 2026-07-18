@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import MathAccordion from '../../components/MathAccordion';
 import { useTheme } from '../ThemeProvider';
 import { useAuth } from '../AuthProvider';
 import ProtectedRoute from '../ProtectedRoute';
@@ -416,57 +417,6 @@ export default function FocusPage() {
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
-  const markdownComponents = {
-    h1: ({ children }: { children?: React.ReactNode }) => (
-      <h1 className="text-lg font-bold mt-3 mb-2 dark:text-white text-gray-900">{children}</h1>
-    ),
-    h2: ({ children }: { children?: React.ReactNode }) => (
-      <h2 className="text-base font-semibold mt-2 mb-1.5 dark:text-white text-gray-900">{children}</h2>
-    ),
-    h3: ({ children }: { children?: React.ReactNode }) => (
-      <h3 className="text-sm font-semibold mt-1.5 mb-1 dark:text-white text-gray-900">{children}</h3>
-    ),
-    p: ({ children }: { children?: React.ReactNode }) => (
-      <p className="mb-1.5 text-sm dark:text-neutral-300 text-gray-700 leading-relaxed">{children}</p>
-    ),
-    ul: ({ children }: { children?: React.ReactNode }) => (
-      <ul className="list-disc list-inside mb-1.5 text-sm dark:text-neutral-300 text-gray-700 space-y-0.5">{children}</ul>
-    ),
-    ol: ({ children }: { children?: React.ReactNode }) => (
-      <ol className="list-decimal list-inside mb-1.5 text-sm dark:text-neutral-300 text-gray-700 space-y-0.5">{children}</ol>
-    ),
-    li: ({ children }: { children?: React.ReactNode }) => (
-      <li className="mb-0.5">{children}</li>
-    ),
-    code: ({ className, children }: { className?: string; children?: React.ReactNode }) => {
-      const isBlock = className?.includes('language-');
-      return isBlock ? (
-        <pre className="bg-gray-900 dark:bg-neutral-800 text-gray-100 p-3 rounded-lg overflow-x-auto my-2 text-xs">
-          <code>{children}</code>
-        </pre>
-      ) : (
-        <code className="bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-xs dark:text-cyan-400 text-cyan-600 font-mono">{children}</code>
-      );
-    },
-    blockquote: ({ children }: { children?: React.ReactNode }) => (
-      <blockquote className="border-l-3 border-cyan-500 pl-3 italic my-2 text-sm dark:text-neutral-400 text-gray-600">{children}</blockquote>
-    ),
-    table: ({ children }: { children?: React.ReactNode }) => (
-      <div className="overflow-x-auto my-2">
-        <table className="w-full border-collapse text-sm dark:text-neutral-300 text-gray-700">{children}</table>
-      </div>
-    ),
-    th: ({ children }: { children?: React.ReactNode }) => (
-      <th className="border border-gray-300 dark:border-gray-700 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 text-left text-xs font-medium">{children}</th>
-    ),
-    td: ({ children }: { children?: React.ReactNode }) => (
-      <td className="border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-xs">{children}</td>
-    ),
-    strong: ({ children }: { children?: React.ReactNode }) => (
-      <strong className="font-semibold dark:text-white text-gray-900">{children}</strong>
-    ),
-  };
-
   return (
     <ProtectedRoute>
       <div className={`h-screen flex overflow-hidden ${theme === 'dark' ? 'dark:bg-neutral-950' : 'bg-gray-50'}`}>
@@ -543,12 +493,11 @@ export default function FocusPage() {
                           ? 'dark:bg-cyan-600 bg-cyan-600 text-white rounded-tr-lg'
                           : 'dark:bg-neutral-800 bg-gray-100 dark:text-white text-gray-900 rounded-tl-lg'
                       }`}>
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          components={msg.role === 'user' ? {} : markdownComponents}
-                        >
-                          {msg.content}
-                        </ReactMarkdown>
+                        {msg.role === 'user' ? (
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                        ) : (
+                          <MathAccordion content={msg.content} />
+                        )}
                       </div>
                       <div className="flex items-center justify-end mt-2">
                         {msg.role === 'assistant' && (
