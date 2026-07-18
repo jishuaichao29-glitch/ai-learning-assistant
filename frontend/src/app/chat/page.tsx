@@ -44,6 +44,13 @@ export default function ChatPage() {
   const useRagRef = useRef(useRag);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
+  const [showSlashMenu, setShowSlashMenu] = useState(false);
+
+  const slashCommands = [
+    { trigger: '/总结', prompt: '请用 3 句话为我总结以下内容的重点：' },
+    { trigger: '/人话', prompt: '请用最通俗易懂的费曼技巧，向一个文科生解释这个概念：' },
+    { trigger: '/翻译', prompt: '请将以下学术内容精准翻译为中文：' },
+  ];
   useEffect(() => {
     useRagRef.current = useRag;
   }, [useRag]);
@@ -952,60 +959,103 @@ export default function ChatPage() {
         </div>
 
         <footer className="p-4 sm:p-6 backdrop-blur-md dark:bg-black/50 bg-white/80 dark:border-t border-gray-200">
-          <div className="max-w-4xl mx-auto flex items-end space-x-3">
-            <button
-              onClick={() => setUseRag(!useRag)}
-              className={`shrink-0 px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center space-x-2 ${
-                useRag 
-                  ? 'bg-cyan-600 text-white shadow-md' 
-                  : 'dark:bg-white/5 bg-gray-100 dark:text-neutral-400 text-gray-500 dark:border border-gray-700 border-gray-200'
-              }`}
-            >
-              <span className={`w-4 h-4 rounded-full ${useRag ? 'bg-white' : 'bg-gray-300'}`}></span>
-              <span>检索上传文档</span>
-            </button>
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => {
-                const newValue = e.target.value;
-                setInput(newValue);
-                if (typeof window !== 'undefined') {
-                  localStorage.setItem('chat_draft', newValue);
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  if (!isLoading && input.trim()) {
-                    handleSend();
-                  }
-                }
-              }}
-              placeholder={isLoading ? 'AI 正在思考中，请稍候...' : '输入您的问题 (按 Enter 发送，Shift+Enter 换行)...'}
-              disabled={isLoading}
-              className={`flex-1 max-h-[${MAX_HEIGHT}px] min-h-[${MIN_HEIGHT}px] p-4 rounded-2xl dark:bg-neutral-900/80 bg-gray-100 dark:border border-gray-200 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none resize-none text-sm transition-all dark:text-white text-gray-900 placeholder:dark:text-neutral-500 placeholder:text-gray-400 disabled:dark:bg-neutral-950/80 disabled:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-70`}
-              rows={1}
-              style={{ height: 'auto' }}
-            />
-            {voiceSupported && (
+          <div className="max-w-4xl mx-auto flex items-end w-full gap-3">
+            <div className="flex-shrink-0">
               <button
-                onClick={toggleVoiceInput}
-                disabled={isLoading}
-                className={`h-[${MIN_HEIGHT}px] w-[${MIN_HEIGHT}px] rounded-2xl flex items-center justify-center shrink-0 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-                  isRecording
-                    ? 'bg-red-500 text-white animate-pulse shadow-lg shadow-red-500/30'
-                    : 'dark:bg-white/5 bg-gray-100 hover:dark:bg-white/10 hover:bg-gray-200 dark:text-neutral-400 text-gray-500 dark:border border-gray-700 border-gray-200'
+                onClick={() => setUseRag(!useRag)}
+                className={`px-4 py-3 rounded-xl text-sm font-medium transition-all flex items-center space-x-2 ${
+                  useRag 
+                    ? 'bg-cyan-600 text-white shadow-md' 
+                    : 'dark:bg-white/5 bg-gray-100 dark:text-neutral-400 text-gray-500 dark:border border-gray-700 border-gray-200'
                 }`}
-                title={isRecording ? '点击停止录音' : '点击开始语音输入'}
               >
-                <Mic className="w-5 h-5" />
+                <span className={`w-4 h-4 rounded-full ${useRag ? 'bg-white' : 'bg-gray-300'}`}></span>
+                <span>检索上传文档</span>
               </button>
-            )}
-            <button
-              onClick={isLoading ? () => abortControllerRef.current?.abort() : handleSend}
-              disabled={!input.trim() && !isLoading}
-              className={`h-[${MIN_HEIGHT}px] px-6 rounded-2xl font-medium transition-colors flex items-center justify-center shrink-0 ${
+            </div>
+            <div className="flex-1 min-w-0 relative">
+              {showSlashMenu && (
+                <div className="absolute bottom-full mb-2 left-0 right-0 bg-white dark:bg-neutral-900 dark:border border-gray-700 rounded-xl shadow-lg overflow-hidden z-50">
+                  <div className="px-3 py-2 dark:bg-neutral-800 bg-gray-50 text-xs font-medium dark:text-neutral-400 text-gray-500">快捷指令</div>
+                  {slashCommands.map((cmd, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        const newInput = cmd.prompt;
+                        setInput(newInput);
+                        setShowSlashMenu(false);
+                        if (typeof window !== 'undefined') {
+                          localStorage.setItem('chat_draft', newInput);
+                        }
+                        setTimeout(() => {
+                          textareaRef.current?.focus();
+                        }, 0);
+                      }}
+                      className="w-full px-4 py-3 text-left hover:dark:bg-white/5 hover:bg-gray-100 flex items-center justify-between transition-colors"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <span className="w-6 h-6 rounded-lg bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center text-cyan-600 dark:text-cyan-400 text-sm font-medium">/</span>
+                        <div>
+                          <div className="text-sm font-medium dark:text-white text-gray-900">{cmd.trigger}</div>
+                          <div className="text-xs dark:text-neutral-500 text-gray-500 truncate max-w-[300px]">{cmd.prompt}</div>
+                        </div>
+                      </div>
+                      <span className="text-xs dark:text-neutral-600 text-gray-400">Tab</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => {
+                  const newValue = e.target.value;
+                  setInput(newValue);
+                  if (typeof window !== 'undefined') {
+                    localStorage.setItem('chat_draft', newValue);
+                  }
+                  if (newValue === '/') {
+                    setShowSlashMenu(true);
+                  } else if (newValue.endsWith('/') && !newValue.slice(0, -1).includes('/')) {
+                    setShowSlashMenu(true);
+                  } else {
+                    setShowSlashMenu(false);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (!isLoading && input.trim()) {
+                      handleSend();
+                    }
+                  }
+                }}
+                placeholder={isLoading ? 'AI 正在思考中，请稍候...' : '输入您的问题 (按 Enter 发送，Shift+Enter 换行)...'}
+                disabled={isLoading}
+                className={`w-full max-h-[${MAX_HEIGHT}px] min-h-[${MIN_HEIGHT}px] p-4 rounded-2xl dark:bg-neutral-900/80 bg-gray-100 dark:border border-gray-200 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none resize-none text-sm transition-all dark:text-white text-gray-900 placeholder:dark:text-neutral-500 placeholder:text-gray-400 disabled:dark:bg-neutral-950/80 disabled:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-70`}
+                rows={1}
+                style={{ height: 'auto' }}
+              />
+            </div>
+            <div className="flex-shrink-0 flex items-end gap-2">
+              {voiceSupported && (
+                <button
+                  onClick={toggleVoiceInput}
+                  disabled={isLoading}
+                  className={`h-[${MIN_HEIGHT}px] w-[${MIN_HEIGHT}px] rounded-2xl flex items-center justify-center transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                    isRecording
+                      ? 'bg-red-500 text-white animate-pulse shadow-lg shadow-red-500/30'
+                      : 'dark:bg-white/5 bg-gray-100 hover:dark:bg-white/10 hover:bg-gray-200 dark:text-neutral-400 text-gray-500 dark:border border-gray-700 border-gray-200'
+                  }`}
+                  title={isRecording ? '点击停止录音' : '点击开始语音输入'}
+                >
+                  <Mic className="w-5 h-5" />
+                </button>
+              )}
+              <button
+                onClick={isLoading ? () => abortControllerRef.current?.abort() : handleSend}
+                disabled={!input.trim() && !isLoading}
+                className={`h-[${MIN_HEIGHT}px] px-6 rounded-2xl font-medium transition-colors flex items-center justify-center ${
                 isLoading 
                   ? 'bg-red-500 hover:bg-red-400 text-white' 
                   : 'bg-cyan-600 hover:bg-cyan-500 disabled:dark:bg-neutral-800 disabled:bg-gray-200 disabled:text-neutral-500 text-white'
@@ -1017,6 +1067,7 @@ export default function ChatPage() {
                 <span>发送 🚀</span>
               )}
             </button>
+            </div>
           </div>
         </footer>
       </main>
