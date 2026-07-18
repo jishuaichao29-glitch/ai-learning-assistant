@@ -1501,6 +1501,41 @@ def upload_knowledge():
         traceback.print_exc()
         return jsonify({'success': False, 'error': f'处理失败: {str(e)}'}), 500
 
+@app.route('/api/search', methods=['GET'])
+@login_required
+def search_history():
+    try:
+        keyword = request.args.get('q', '').strip()
+        
+        if not keyword:
+            return jsonify({'success': True, 'results': []})
+        
+        try:
+            user_id = int(g.user_id)
+        except (ValueError, TypeError):
+            user_id = g.user_id
+        
+        results = ChatHistory.query \
+            .filter_by(user_id=user_id) \
+            .filter(ChatHistory.content.like(f'%{keyword}%')) \
+            .order_by(ChatHistory.timestamp.desc()) \
+            .limit(50) \
+            .all()
+        
+        search_results = []
+        for item in results:
+            search_results.append({
+                'content': item.content,
+                'role': item.role,
+                'chatId': item.session_id,
+                'createdAt': item.timestamp
+            })
+        
+        return jsonify({'success': True, 'results': search_results})
+    except Exception as e:
+        print(f"搜索失败: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()

@@ -45,6 +45,11 @@ export default function ChatPage() {
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
   const [showSlashMenu, setShowSlashMenu] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const slashCommands = [
     { trigger: '/总结', prompt: '请用 3 句话为我总结以下内容的重点：' },
@@ -269,6 +274,79 @@ export default function ChatPage() {
       console.error("Error fetching sessions:", err);
     }
   }, [token]);
+
+  const debounce = useCallback((func: (...args: any[]) => void, delay: number) => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+    return (...args: any[]) => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => func(...args), delay);
+    };
+  }, []);
+
+  const performSearch = useCallback(async (keyword: string) => {
+    if (!keyword.trim() || !token) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const response = await fetch(`http://127.0.0.1:5000/api/search?q=${encodeURIComponent(keyword)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSearchResults(data.results || []);
+        setShowSearchResults(data.results && data.results.length > 0);
+      } else {
+        setSearchResults([]);
+        setShowSearchResults(false);
+      }
+    } catch (error) {
+      console.error('搜索失败:', error);
+      setSearchResults([]);
+      setShowSearchResults(false);
+    } finally {
+      setIsSearching(false);
+    }
+  }, [token]);
+
+  const debouncedSearch = useMemo(() => debounce(performSearch, 300), [debounce, performSearch]);
+
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+    debouncedSearch(value);
+  }, [debouncedSearch]);
+
+  const handleSearchResultClick = useCallback((chatId: string) => {
+    setCurrentSessionId(chatId);
+    setSearchQuery('');
+    setSearchResults([]);
+    setShowSearchResults(false);
+    searchInputRef.current?.blur();
+  }, []);
+
+  const highlightKeyword = useCallback((text: string, keyword: string) => {
+    if (!keyword.trim()) return text;
+    const regex = new RegExp(`(${keyword})`, 'gi');
+    const parts = text.split(regex);
+    return parts.map((part, index) =>
+      regex.test(part) ? (
+        <mark key={index} className="bg-yellow-200 text-black px-0.5 rounded">
+          {part}
+        </mark>
+      ) : (
+        <span key={index}>{part}</span>
+      )
+    );
+  }, []);
+
+  const formatSearchDate = useCallback((timestamp: number) => {
+    const date = new Date(timestamp * 1000);
+    return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }, []);
 
   useEffect(() => {
     if (token) {
@@ -757,7 +835,66 @@ export default function ChatPage() {
     <ProtectedRoute>
       <div className="flex h-screen dark:bg-neutral-950 bg-gray-50 font-sans">
       <aside className="w-72 backdrop-blur-md dark:bg-black/30 bg-white/80 dark:border-r border-gray-200 flex flex-col shrink-0">
-        <div className="p-4 dark:border-b border-gray-200">
+        <div className="p-4">
+          <div className="relative">
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={handleSearchChange}
+              placeholder="搜索历史聊天记录..."
+              className="w-full px-4 py-2.5 pl-10 rounded-xl dark:bg-white/5 bg-gray-100 dark:border border-gray-700 border-gray-200 text-sm dark:text-white text-gray-900 placeholder-gray-500 focus:outline-none focus:dark:border-cyan-500/50 focus:border-cyan-400 transition-colors"
+            />
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+              {isSearching ? '⏳' : '🔍'}
+            </span>
+            {searchQuery && (
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setSearchResults([]);
+                  setShowSearchResults(false);
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          
+          {showSearchResults && (
+            <div className="mt-2 bg-white dark:bg-neutral-900 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 max-h-[400px] overflow-y-auto">
+              <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-500 dark:text-gray-400">
+                找到 {searchResults.length} 条结果
+              </div>
+              {searchResults.map((result, index) => (
+                <button
+                  key={index}
+                  onClick={() => handleSearchResultClick(result.chatId)}
+                  className="w-full px-3 py-3 text-left hover:bg-gray-100 dark:hover:bg-white/5 transition-colors border-b border-gray-100 dark:border-gray-800 last:border-b-0"
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      result.role === 'user' 
+                        ? 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300' 
+                        : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                    }`}>
+                      {result.role === 'user' ? '我' : 'AI'}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      {formatSearchDate(result.createdAt)}
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-800 dark:text-gray-200 line-clamp-2">
+                    {highlightKeyword(result.content, searchQuery)}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        
+        <div className="px-4 pb-4 dark:border-b border-gray-200">
           <button
             onClick={createNewSession}
             className="w-full py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 font-medium transition-colors flex items-center justify-center space-x-2 text-white"
