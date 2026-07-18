@@ -701,6 +701,43 @@ def delete_session(session_id):
         print(f"删除会话失败: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/chat/breakpoint', methods=['POST'])
+@login_required
+def insert_breakpoint():
+    data = request.get_json()
+    session_id = data.get('session_id', '')
+    
+    if not session_id:
+        return jsonify({'success': False, 'error': 'session_id is required'}), 400
+    
+    try:
+        try:
+            chat_user_id = int(g.user_id)
+        except (ValueError, TypeError):
+            chat_user_id = g.user_id
+        
+        current_time = int(time.time())
+        
+        breakpoint_msg = ChatHistory(
+            user_id=chat_user_id,
+            session_id=session_id,
+            role='breakpoint',
+            content='',
+            timestamp=current_time,
+            is_focus_mode=False
+        )
+        
+        db.session.add(breakpoint_msg)
+        db.session.commit()
+        
+        print(f"🔨 已插入断点标记: session_id={session_id}")
+        return jsonify({'success': True})
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"插入断点失败: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/chat', methods=['POST'])
 @login_required
 def chat():
@@ -739,6 +776,16 @@ def chat():
             if '知识库中未找到' in last_assistant_content:
                 history_list = history_list[:-1]
                 print(f"🧹 过滤掉历史中失败的助手回复")
+
+        breakpoint_index = -1
+        for i in range(len(history_list) - 1, -1, -1):
+            if history_list[i]['role'] == 'breakpoint':
+                breakpoint_index = i
+                break
+        
+        if breakpoint_index >= 0:
+            history_list = history_list[breakpoint_index + 1:]
+            print(f"🔨 检测到断点标记，已截断历史，保留 {len(history_list)} 条消息")
     
     context = None
     if use_rag:

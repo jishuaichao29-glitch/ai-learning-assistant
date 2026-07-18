@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import MathAccordion from '../../components/MathAccordion';
 import { useTheme } from '../ThemeProvider';
@@ -9,7 +9,7 @@ import ProtectedRoute from '../ProtectedRoute';
 import { Copy, RefreshCw, Check, Star, Mic } from 'lucide-react';
 
 interface Message {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'breakpoint';
   content: string;
   is_favorited?: boolean;
 }
@@ -271,8 +271,10 @@ export default function ChatPage() {
   }, [token]);
 
   useEffect(() => {
-    fetchSessions();
-  }, [fetchSessions, token]);
+    if (token) {
+      fetchSessions();
+    }
+  }, [token]);
 
   const fetchHistory = useCallback(async (sessionId: string) => {
     try {
@@ -291,10 +293,10 @@ export default function ChatPage() {
   }, [token]);
 
   useEffect(() => {
-    if (currentSessionId) {
+    if (currentSessionId && token) {
       fetchHistory(currentSessionId);
     }
-  }, [currentSessionId, fetchHistory]);
+  }, [currentSessionId, token]);
 
   const createNewSession = async () => {
     try {
@@ -383,10 +385,11 @@ export default function ChatPage() {
     }
   };
 
-  const handleSend = async () => {
-    if (!input.trim() || isLoading || !currentSessionIdRef.current) return;
+  const handleSend = async (textToSend?: string) => {
+    const content = textToSend || input;
+    if (!content.trim() || isLoading || !currentSessionIdRef.current) return;
 
-    const userMessage = input.trim();
+    const userMessage = content.trim();
     setInput('');
     if (typeof window !== 'undefined') {
       localStorage.removeItem('chat_draft');
@@ -611,6 +614,29 @@ export default function ChatPage() {
         console.error('Error clearing history:', error);
         alert('清空失败，请检查网络连接。');
       }
+    }
+  };
+
+  const handleInsertBreakpoint = async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:5000/api/chat/breakpoint', {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({ session_id: currentSessionIdRef.current })
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        setMessages(prev => [...prev, { role: 'breakpoint', content: '' }]);
+        setToastMessage('上下文断点已插入，后续对话将轻装上阵！');
+        setShowFavoriteToast(true);
+        setTimeout(() => setShowFavoriteToast(false), 2000);
+      } else {
+        alert('插入断点失败，请稍后重试。');
+      }
+    } catch (error) {
+      console.error('Error inserting breakpoint:', error);
+      alert('插入断点失败，请检查网络连接。');
     }
   };
 
@@ -903,48 +929,68 @@ export default function ChatPage() {
               <span>🗑️</span>
               <span className="hidden sm:inline">清空记忆</span>
             </button>
+            <button
+              onClick={handleInsertBreakpoint}
+              className="w-12 h-12 rounded-xl text-lg font-bold flex items-center justify-center bg-yellow-400 text-black z-50 animate-pulse shadow-lg hover:bg-yellow-300 transition-all"
+              title="清除上下文记忆"
+            >
+              🧹
+            </button>
           </div>
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
           <div className="max-w-4xl mx-auto space-y-6">
-            {messages.map((msg, idx) => (
-              <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] rounded-2xl px-5 py-3.5 text-sm sm:text-base leading-relaxed ${
-                  msg.role === 'user' 
-                    ? 'bg-gradient-to-br from-cyan-600 to-blue-600 text-white shadow-lg' 
-                    : 'backdrop-blur-md dark:bg-white/5 bg-gray-100 dark:border border-gray-200 text-gray-800 dark:text-neutral-200'
-                } relative group`}>
-                  {msg.role === 'user' ? (
-                    <span className="whitespace-pre-wrap">{msg.content}</span>
-                  ) : (
-                    <MathAccordion content={msg.content} />
-                  )}
-                  
-                  {msg.role === 'assistant' && (
-                    <div className="flex items-center space-x-1 mt-3 pt-3 border-t dark:border-gray-700 border-gray-200">
-                      <CopyButton text={msg.content} size={14} className="p-1.5 opacity-60 hover:opacity-100 hover:dark:bg-white/10 hover:bg-gray-200 rounded-lg transition-all" />
-                      <button
-                        onClick={() => handleRegenerate(idx)}
-                        disabled={isLoading}
-                        className="p-1.5 opacity-60 hover:opacity-100 rounded-lg hover:dark:bg-white/10 hover:bg-gray-200 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                        title="重新生成"
-                      >
-                        <RefreshCw size={14} className={`dark:text-neutral-400 text-gray-500 ${isLoading ? 'animate-spin' : ''}`} />
-                      </button>
-                      <button
-                        onClick={() => handleFavorite(idx)}
-                        disabled={isLoading}
-                        className={`p-1.5 opacity-60 hover:opacity-100 rounded-lg hover:dark:bg-white/10 hover:bg-gray-200 transition-all disabled:opacity-30 disabled:cursor-not-allowed ${msg.is_favorited ? 'text-yellow-500' : ''}`}
-                        title={msg.is_favorited ? '点击取消收藏' : '收藏到知识卡片'}
-                      >
-                        <Star size={14} className={`${msg.is_favorited ? 'fill-yellow-500 text-yellow-500' : 'dark:text-neutral-400 text-gray-500'}`} />
-                      </button>
+            {messages.map((msg, idx) => {
+              if (msg.role === 'breakpoint') {
+                return (
+                  <div key={idx} className="flex items-center justify-center py-4">
+                    <div className="flex items-center w-full max-w-md">
+                      <div className="flex-1 h-px dark:bg-gray-700 bg-gray-300"></div>
+                      <span className="px-4 text-xs dark:text-neutral-500 text-gray-500">以上记忆已归档</span>
+                      <div className="flex-1 h-px dark:bg-gray-700 bg-gray-300"></div>
                     </div>
-                  )}
+                  </div>
+                );
+              }
+              return (
+                <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[80%] rounded-2xl px-5 py-3.5 text-sm sm:text-base leading-relaxed ${
+                    msg.role === 'user' 
+                      ? 'bg-gradient-to-br from-cyan-600 to-blue-600 text-white shadow-lg' 
+                      : 'backdrop-blur-md dark:bg-white/5 bg-gray-100 dark:border border-gray-200 text-gray-800 dark:text-neutral-200'
+                  } relative group`}>
+                    {msg.role === 'user' ? (
+                      <span className="whitespace-pre-wrap">{msg.content}</span>
+                    ) : (
+                      <MathAccordion content={msg.content} />
+                    )}
+                  
+                    {msg.role === 'assistant' && (
+                      <div className="flex items-center space-x-1 mt-3 pt-3 border-t dark:border-gray-700 border-gray-200">
+                        <CopyButton text={msg.content} size={14} className="p-1.5 opacity-60 hover:opacity-100 hover:dark:bg-white/10 hover:bg-gray-200 rounded-lg transition-all" />
+                        <button
+                          onClick={() => handleRegenerate(idx)}
+                          disabled={isLoading}
+                          className="p-1.5 opacity-60 hover:opacity-100 rounded-lg hover:dark:bg-white/10 hover:bg-gray-200 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                          title="重新生成"
+                        >
+                          <RefreshCw size={14} className={`dark:text-neutral-400 text-gray-500 ${isLoading ? 'animate-spin' : ''}`} />
+                        </button>
+                        <button
+                          onClick={() => handleFavorite(idx)}
+                          disabled={isLoading}
+                          className={`p-1.5 opacity-60 hover:opacity-100 rounded-lg hover:dark:bg-white/10 hover:bg-gray-200 transition-all disabled:opacity-30 disabled:cursor-not-allowed ${msg.is_favorited ? 'text-yellow-500' : ''}`}
+                          title={msg.is_favorited ? '点击取消收藏' : '收藏到知识卡片'}
+                        >
+                          <Star size={14} className={`${msg.is_favorited ? 'fill-yellow-500 text-yellow-500' : 'dark:text-neutral-400 text-gray-500'}`} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {isWaiting && (
               <div className="flex justify-start">
                 <div className="max-w-[80%] rounded-2xl px-5 py-3.5 backdrop-blur-md dark:bg-white/5 bg-gray-100 dark:border border-gray-200 flex items-center space-x-2">
@@ -1053,7 +1099,7 @@ export default function ChatPage() {
                 </button>
               )}
               <button
-                onClick={isLoading ? () => abortControllerRef.current?.abort() : handleSend}
+                onClick={isLoading ? () => abortControllerRef.current?.abort() : () => handleSend()}
                 disabled={!input.trim() && !isLoading}
                 className={`h-[${MIN_HEIGHT}px] px-6 rounded-2xl font-medium transition-colors flex items-center justify-center ${
                 isLoading 

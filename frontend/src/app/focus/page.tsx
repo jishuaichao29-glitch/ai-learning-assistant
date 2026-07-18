@@ -11,7 +11,7 @@ import ProtectedRoute from '../ProtectedRoute';
 import { Copy, Check, Play, Pause, RotateCcw, Clock, ArrowLeft } from 'lucide-react';
 
 interface Message {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'breakpoint';
   content: string;
 }
 
@@ -483,39 +483,49 @@ export default function FocusPage() {
             <div className="flex-1 overflow-y-auto p-6">
               <div className="max-w-4xl mx-auto space-y-6">
                 {messages.map((msg, idx) => (
-                  <div
-                    key={idx}
-                    className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div className={`max-w-[85%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                      <div className={`p-4 rounded-2xl ${
-                        msg.role === 'user'
-                          ? 'dark:bg-cyan-600 bg-cyan-600 text-white rounded-tr-lg'
-                          : 'dark:bg-neutral-800 bg-gray-100 dark:text-white text-gray-900 rounded-tl-lg'
-                      }`}>
-                        {msg.role === 'user' ? (
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
-                        ) : (
-                          <MathAccordion content={msg.content} />
-                        )}
-                      </div>
-                      <div className="flex items-center justify-end mt-2">
-                        {msg.role === 'assistant' && (
-                          <button
-                            onClick={() => handleCopy(idx)}
-                            className="p-1.5 opacity-60 hover:opacity-100 rounded-lg hover:dark:bg-white/10 hover:bg-gray-200 transition-all"
-                            title="复制"
-                          >
-                            {copiedIndex === idx ? (
-                              <Check size={12} className="text-green-500" />
-                            ) : (
-                              <Copy size={12} className="dark:text-neutral-400 text-gray-500" />
-                            )}
-                          </button>
-                        )}
+                  msg.role === 'breakpoint' ? (
+                    <div key={idx} className="flex items-center justify-center py-4">
+                      <div className="flex items-center w-full max-w-md">
+                        <div className="flex-1 h-px dark:bg-gray-700 bg-gray-300"></div>
+                        <span className="px-4 text-xs dark:text-neutral-500 text-gray-500">以上记忆已归档</span>
+                        <div className="flex-1 h-px dark:bg-gray-700 bg-gray-300"></div>
                       </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div
+                      key={idx}
+                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div className={`max-w-[85%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                        <div className={`p-4 rounded-2xl ${
+                          msg.role === 'user'
+                            ? 'dark:bg-cyan-600 bg-cyan-600 text-white rounded-tr-lg'
+                            : 'dark:bg-neutral-800 bg-gray-100 dark:text-white text-gray-900 rounded-tl-lg'
+                        }`}>
+                          {msg.role === 'user' ? (
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                          ) : (
+                            <MathAccordion content={msg.content} />
+                          )}
+                        </div>
+                        <div className="flex items-center justify-end mt-2">
+                          {msg.role === 'assistant' && (
+                            <button
+                              onClick={() => handleCopy(idx)}
+                              className="p-1.5 opacity-60 hover:opacity-100 rounded-lg hover:dark:bg-white/10 hover:bg-gray-200 transition-all"
+                              title="复制"
+                            >
+                              {copiedIndex === idx ? (
+                                <Check size={12} className="text-green-500" />
+                              ) : (
+                                <Copy size={12} className="dark:text-neutral-400 text-gray-500" />
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
                 ))}
                 <div ref={messagesEndRef} />
               </div>

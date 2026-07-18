@@ -25,15 +25,11 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     
     if (!savedToken) {
       setHasToken(false);
-      if (!hasRedirected) {
-        const timer = setTimeout(() => {
-          setIsChecking(false);
-          setHasRedirected(true);
-          router.push('/login');
-        }, 100);
-        return () => clearTimeout(timer);
-      }
-      return;
+      const timer = setTimeout(() => {
+        setIsChecking(false);
+        router.push('/login');
+      }, 100);
+      return () => clearTimeout(timer);
     }
 
     setHasToken(true);
@@ -47,28 +43,21 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
         if (!response.ok) {
           logout();
           setHasToken(false);
-          if (!hasRedirected) {
-            setIsChecking(false);
-            setHasRedirected(true);
-            router.push('/login');
-          }
+          setIsChecking(false);
+          router.push('/login');
         } else {
           setIsChecking(false);
-          setHasRedirected(false);
         }
       } catch {
         logout();
         setHasToken(false);
-        if (!hasRedirected) {
-          setIsChecking(false);
-          setHasRedirected(true);
-          router.push('/login');
-        }
+        setIsChecking(false);
+        router.push('/login');
       }
     };
 
     validateToken();
-  }, [isAuthenticated, router, hasRedirected, token, logout]);
+  }, []);
 
   if (!mounted) {
     return (
