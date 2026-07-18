@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import MathAccordion from '../../components/MathAccordion';
 import { useTheme } from '../ThemeProvider';
@@ -58,6 +59,9 @@ export default function ChatPage() {
   const [showSearchResults, setShowSearchResults] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [selectedText, setSelectedText] = useState('');
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+  const [showTooltip, setShowTooltip] = useState(false);
 
   const slashCommands = [
     { trigger: '/总结', prompt: '请用 3 句话为我总结以下内容的重点：' },
@@ -89,6 +93,43 @@ export default function ChatPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    const handleMouseUp = (e: MouseEvent) => {
+      const text = window.getSelection()?.toString().trim();
+      if (text && text.length >= 2) {
+        setTooltipPos({ x: e.clientX, y: e.clientY - 40 });
+        setSelectedText(text);
+        setShowTooltip(true);
+        console.log("DEBUG TOOLTIP - selected:", text, "pos:", e.clientX, e.clientY);
+      } else {
+        setShowTooltip(false);
+      }
+    };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.selection-tooltip')) {
+        setShowTooltip(false);
+      }
+    };
+
+    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mousedown', handleMouseDown);
+
+    return () => {
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mousedown', handleMouseDown);
+    };
+  }, []);
+
+  const handleTooltipClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const promptText = `请为我详细解释一下这个专业概念：${selectedText}`;
+    setShowTooltip(false);
+    window.getSelection()?.removeAllRanges();
+    await handleSend(promptText);
+  };
 
   const MIN_HEIGHT = 44;
   const MAX_HEIGHT = 200;
@@ -1530,6 +1571,26 @@ export default function ChatPage() {
             </div>
           </div>
         </footer>
+
+      {showTooltip && typeof window !== 'undefined' && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            left: tooltipPos.x,
+            top: tooltipPos.y,
+            zIndex: 99999,
+            transform: 'translateX(-50%)',
+          }}
+          className="bg-black text-white text-xs px-3 py-2 rounded shadow-2xl flex items-center gap-1 cursor-pointer hover:bg-gray-800"
+          onClick={handleTooltipClick}
+          onMouseDown={(e) => e.stopPropagation()}
+          onMouseUp={(e) => e.stopPropagation()}
+        >
+          <span>❓</span>
+          <span>解释此概念</span>
+        </div>,
+        document.body
+      )}
       </main>
     </div>
 
