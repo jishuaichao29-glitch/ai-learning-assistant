@@ -13,3 +13,7 @@
 2026-07-19 13:31:39,856 - werkzeug - WARNING -  * Debugger is active!
 2026-07-19 13:31:39,858 - werkzeug - INFO -  * Debugger PIN: 103-477-634
 2026-07-19 13:41:44,108 - werkzeug - INFO -  * Detected change in 'C:\\Users\\31931\\Desktop\\ai-learning-assistant\\backend\\test_app.py', reloading
+2026-07-19 13:41:45,716 - faiss.loader - INFO - Loading faiss with AVX2 support.
+2026-07-19 13:41:45,728 - faiss.loader - INFO - Successfully loaded faiss with AVX2 support.
+2026-07-19 13:41:48,962 - werkzeug - WARNING -  * Debugger is active!
+2026-07-19 13:41:48,964 - werkzeug - INFO -  * Debugger PIN: 103-477-634
