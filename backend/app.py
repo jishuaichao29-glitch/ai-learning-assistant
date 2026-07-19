@@ -1,4 +1,15 @@
 import os
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('app.log', encoding='utf-8')
+    ]
+)
+logger = logging.getLogger(__name__)
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 env_path = os.path.join(basedir, '.env')
@@ -16,7 +27,6 @@ from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 import time
 import json
-import os
 import traceback
 
 os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
@@ -884,8 +894,7 @@ def chat():
                 yield f"data: {chunk_data}\n\n"
                 time.sleep(0.05)
         except Exception as e:
-            print(f"大模型调用失败: {e}")
-            traceback.print_exc()
+            logger.error(f"大模型调用失败: {e}", exc_info=True)
             full_response = "抱歉，网络连接异常，请稍后重试。"
             for char in full_response:
                 chunk_data = json.dumps({'chunk': char})

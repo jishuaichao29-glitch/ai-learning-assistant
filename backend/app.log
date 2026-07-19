@@ -1,0 +1,15 @@
+2026-07-19 13:23:17,114 - faiss.loader - INFO - Loading faiss with AVX2 support.
+2026-07-19 13:23:17,339 - faiss.loader - INFO - Successfully loaded faiss with AVX2 support.
+2026-07-19 13:23:28,276 - werkzeug - WARNING -  * Debugger is active!
+2026-07-19 13:23:28,277 - werkzeug - INFO -  * Debugger PIN: 103-477-634
+2026-07-19 13:29:43,773 - werkzeug - INFO -  * Detected change in 'C:\\Users\\31931\\Desktop\\ai-learning-assistant\\backend\\test_app.py', reloading
+2026-07-19 13:29:45,582 - faiss.loader - INFO - Loading faiss with AVX2 support.
+2026-07-19 13:29:45,594 - faiss.loader - INFO - Successfully loaded faiss with AVX2 support.
+2026-07-19 13:29:48,900 - werkzeug - WARNING -  * Debugger is active!
+2026-07-19 13:29:48,903 - werkzeug - INFO -  * Debugger PIN: 103-477-634
+2026-07-19 13:31:34,425 - werkzeug - INFO -  * Detected change in 'C:\\Users\\31931\\Desktop\\ai-learning-assistant\\backend\\test_app.py', reloading
+2026-07-19 13:31:36,061 - faiss.loader - INFO - Loading faiss with AVX2 support.
+2026-07-19 13:31:36,077 - faiss.loader - INFO - Successfully loaded faiss with AVX2 support.
+2026-07-19 13:31:39,856 - werkzeug - WARNING -  * Debugger is active!
+2026-07-19 13:31:39,858 - werkzeug - INFO -  * Debugger PIN: 103-477-634
+2026-07-19 13:41:44,108 - werkzeug - INFO -  * Detected change in 'C:\\Users\\31931\\Desktop\\ai-learning-assistant\\backend\\test_app.py', reloading
