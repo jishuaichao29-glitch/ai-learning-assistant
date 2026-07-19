@@ -3,6 +3,18 @@
 > 一个基于大语言模型的全栈智能聊天系统，具备流式对话、上下文管理、RAG 知识库、用户反馈等核心能力。
 
 ---
+### 🌐 线上公网访问与源码留痕 (Grader Quick Access)
+
+* **项目 GitHub 源码仓库 (查看 Git 提交历史)**：[点击跳转 GitHub 仓库](https://github.com/jishuaichao29-glitch/ai-learning-assistant)
+* **项目演示录屏视频 (百度网盘)**：[点击跳转观看演示视频](https://pan.baidu.com/s/1rbsnSS2VtthbkTO2ZCShPw?pwd=b4iv) （提取码: b4iv）
+* **前端公网访问地址**：[https://ai-learning-assistant-1-52qt.onrender.com](https://ai-learning-assistant-1-52qt.onrender.com)
+* **后端公网访问地址**：[https://ai-learning-assistant-6hw0.onrender.com](https://ai-learning-assistant-6hw0.onrender.com)
+
+> 💡 **⚠️ 评分友情提示 (Grader Note)**：
+> 本项目全栈服务均托管于 **Render 免费云端服务器**。由于 Render 免费层存在容器自动休眠机制（Spin Down），若项目处于闲置状态，**首次点开网页或首次点击【注册/登录】按钮时，后端需要约 50 秒的冷启动唤醒时间**。
+> **阅卷测试时若遇到界面卡顿或“请稍候”，请耐心等待约 1 分钟热身，或者刷新页面重新输入即可恢复秒级正常流式响应。**
+
+---
 
 ## 📋 项目介绍
 
