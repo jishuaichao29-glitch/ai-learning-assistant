@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
@@ -52,7 +52,7 @@ export default function ProfileDashboard() {
   useEffect(() => {
     if (!mounted) return;
 
-    fetch('http://127.0.0.1:5000/api/user/profile', {
+    fetch('https://ai-learning-assistant-6hw0.onrender.com/api/user/profile', {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then((res) => {
@@ -101,7 +101,7 @@ export default function ProfileDashboard() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/user/change-password', {
+      const response = await fetch('https://ai-learning-assistant-6hw0.onrender.com/api/user/change-password', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -180,7 +180,7 @@ export default function ProfileDashboard() {
     }
 
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/user/profile', {
+      const response = await fetch('https://ai-learning-assistant-6hw0.onrender.com/api/user/profile', {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -234,7 +234,7 @@ export default function ProfileDashboard() {
     setIsUploadingAvatar(true);
 
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/user/profile', {
+      const response = await fetch('https://ai-learning-assistant-6hw0.onrender.com/api/user/profile', {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -275,7 +275,7 @@ export default function ProfileDashboard() {
   const handleExportData = async () => {
     setIsExporting(true);
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/user/export', {
+      const response = await fetch('https://ai-learning-assistant-6hw0.onrender.com/api/user/export', {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -320,7 +320,7 @@ export default function ProfileDashboard() {
 
   const handleDeleteAccount = async () => {
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/user/account', {
+      const response = await fetch('https://ai-learning-assistant-6hw0.onrender.com/api/user/account', {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });

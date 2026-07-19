@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -49,7 +49,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!mounted) return;
 
-    const fetchUserStats = fetch('http://127.0.0.1:5000/api/user/stats', {
+    const fetchUserStats = fetch('https://ai-learning-assistant-6hw0.onrender.com/api/user/stats', {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then((res) => {
@@ -65,7 +65,7 @@ export default function DashboardPage() {
         return res.json();
       });
 
-    const fetchStats = fetch('http://127.0.0.1:5000/api/stats', {
+    const fetchStats = fetch('https://ai-learning-assistant-6hw0.onrender.com/api/stats', {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then((res) => {

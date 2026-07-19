@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
@@ -255,7 +255,7 @@ export default function ChatPage() {
 
     if (isCurrentlyFavorited) {
       try {
-        const response = await fetch('http://127.0.0.1:5000/api/favorites', {
+        const response = await fetch('https://ai-learning-assistant-6hw0.onrender.com/api/favorites', {
           method: 'DELETE',
           headers: authHeaders,
           body: JSON.stringify({
@@ -279,7 +279,7 @@ export default function ChatPage() {
       }
     } else {
       try {
-        const response = await fetch('http://127.0.0.1:5000/api/favorites', {
+        const response = await fetch('https://ai-learning-assistant-6hw0.onrender.com/api/favorites', {
           method: 'POST',
           headers: authHeaders,
           body: JSON.stringify({
@@ -331,7 +331,7 @@ export default function ChatPage() {
     });
 
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/messages/${message.id}/feedback`, {
+      const response = await fetch(`https://ai-learning-assistant-6hw0.onrender.com/api/messages/${message.id}/feedback`, {
         method: 'POST',
         headers: authHeaders,
         body: JSON.stringify({ type: feedbackType })
@@ -392,7 +392,7 @@ export default function ChatPage() {
     try {
       const currentUseRag = useRagRef.current;
       
-      const response = await fetch('http://127.0.0.1:5000/api/chat', {
+      const response = await fetch('https://ai-learning-assistant-6hw0.onrender.com/api/chat', {
         method: 'POST',
         headers: authHeaders,
         body: JSON.stringify({ 
@@ -481,7 +481,7 @@ export default function ChatPage() {
 
   const fetchSessions = useCallback(async () => {
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/sessions', {
+      const response = await fetch('https://ai-learning-assistant-6hw0.onrender.com/api/sessions', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -514,7 +514,7 @@ export default function ChatPage() {
 
     setIsSearching(true);
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/search?q=${encodeURIComponent(keyword)}`, {
+      const response = await fetch(`https://ai-learning-assistant-6hw0.onrender.com/api/search?q=${encodeURIComponent(keyword)}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -578,7 +578,7 @@ export default function ChatPage() {
 
   const fetchHistory = useCallback(async (sessionId: string) => {
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/history?session_id=${sessionId}`, {
+      const response = await fetch(`https://ai-learning-assistant-6hw0.onrender.com/api/history?session_id=${sessionId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -602,7 +602,7 @@ export default function ChatPage() {
 
   const createNewSession = async () => {
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/sessions', {
+      const response = await fetch('https://ai-learning-assistant-6hw0.onrender.com/api/sessions', {
         method: 'POST',
         headers: authHeaders,
       });
@@ -623,7 +623,7 @@ export default function ChatPage() {
     }
 
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/sessions/${sessionId}`, {
+      const response = await fetch(`https://ai-learning-assistant-6hw0.onrender.com/api/sessions/${sessionId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -652,7 +652,7 @@ export default function ChatPage() {
 
   const updateSessionTitle = async (sessionId: string, newTitle: string) => {
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/sessions/${sessionId}`, {
+      const response = await fetch(`https://ai-learning-assistant-6hw0.onrender.com/api/sessions/${sessionId}`, {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: newTitle })
@@ -672,7 +672,7 @@ export default function ChatPage() {
       const session = sessions.find(s => s.id === sessionId);
       if (!session) return;
       
-      const response = await fetch(`http://127.0.0.1:5000/api/sessions/${sessionId}`, {
+      const response = await fetch(`https://ai-learning-assistant-6hw0.onrender.com/api/sessions/${sessionId}`, {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_pinned: !session.is_pinned })
@@ -702,7 +702,7 @@ export default function ChatPage() {
     abortControllerRef.current = new AbortController();
 
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/chat', {
+      const response = await fetch('https://ai-learning-assistant-6hw0.onrender.com/api/chat', {
         method: 'POST',
         headers: authHeaders,
         body: JSON.stringify({ message: userMessage, session_id: currentSessionIdRef.current, use_rag: useRag, is_focus_mode: false }),
@@ -799,7 +799,7 @@ export default function ChatPage() {
       const isDefaultTitle = currentSession && (currentSession.title === '新对话' || currentSession.title === 'New Chat');
       
       if (shouldGenerateTitle && isDefaultTitle && currentSessionIdRef.current) {
-        fetch('http://127.0.0.1:5000/api/chat/generate_title', {
+        fetch('https://ai-learning-assistant-6hw0.onrender.com/api/chat/generate_title', {
           method: 'POST',
           headers: authHeaders,
           body: JSON.stringify({ 
@@ -846,7 +846,7 @@ export default function ChatPage() {
       const currentUseRag = useRagRef.current;
       console.log(`[Regenerate] use_rag: ${currentUseRag}`);
       
-      const response = await fetch('http://127.0.0.1:5000/api/chat', {
+      const response = await fetch('https://ai-learning-assistant-6hw0.onrender.com/api/chat', {
         method: 'POST',
         headers: authHeaders,
         body: JSON.stringify({ message: userMessage.content, session_id: currentSessionIdRef.current, use_rag: currentUseRag, is_focus_mode: false }),
@@ -938,7 +938,7 @@ export default function ChatPage() {
   const handleClearHistory = async () => {
     if (confirm('确定要清空当前对话的所有记忆吗？此操作不可恢复。')) {
       try {
-        const response = await fetch(`http://127.0.0.1:5000/api/history?session_id=${currentSessionId}`, {
+        const response = await fetch(`https://ai-learning-assistant-6hw0.onrender.com/api/history?session_id=${currentSessionId}`, {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -956,7 +956,7 @@ export default function ChatPage() {
 
   const handleInsertBreakpoint = async () => {
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/chat/breakpoint', {
+      const response = await fetch('https://ai-learning-assistant-6hw0.onrender.com/api/chat/breakpoint', {
         method: 'POST',
         headers: authHeaders,
         body: JSON.stringify({ session_id: currentSessionIdRef.current })
@@ -1023,7 +1023,7 @@ export default function ChatPage() {
     formData.append('file', selectedFile);
 
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/knowledge/upload', {
+      const response = await fetch('https://ai-learning-assistant-6hw0.onrender.com/api/knowledge/upload', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`

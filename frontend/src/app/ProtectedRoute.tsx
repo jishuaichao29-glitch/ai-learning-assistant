@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -36,7 +36,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
 
     const validateToken = async () => {
       try {
-        const response = await fetch('http://127.0.0.1:5000/api/user/info', {
+        const response = await fetch('https://ai-learning-assistant-6hw0.onrender.com/api/user/info', {
           headers: { 'Authorization': `Bearer ${savedToken}` }
         });
         

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -33,7 +33,7 @@ export default function NotebookPage() {
   const fetchFavorites = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/favorites', {
+      const response = await fetch('https://ai-learning-assistant-6hw0.onrender.com/api/favorites', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -50,7 +50,7 @@ export default function NotebookPage() {
   const handleDelete = async (id: number) => {
     setDeletingId(id);
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/favorites/${id}`, {
+      const response = await fetch(`https://ai-learning-assistant-6hw0.onrender.com/api/favorites/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
@@ -256,7 +256,7 @@ export default function FocusPage() {
 
   const initSession = async () => {
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/sessions', {
+      const response = await fetch('https://ai-learning-assistant-6hw0.onrender.com/api/sessions', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -280,7 +280,7 @@ export default function FocusPage() {
 
   const createSession = async () => {
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/sessions', {
+      const response = await fetch('https://ai-learning-assistant-6hw0.onrender.com/api/sessions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ title: '专注学习' })
@@ -302,7 +302,7 @@ export default function FocusPage() {
 
   const loadHistory = async (sessionId: string) => {
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/history?session_id=${sessionId}`, {
+      const response = await fetch(`https://ai-learning-assistant-6hw0.onrender.com/api/history?session_id=${sessionId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -329,7 +329,7 @@ export default function FocusPage() {
     abortControllerRef.current = controller;
 
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/chat', {
+      const response = await fetch('https://ai-learning-assistant-6hw0.onrender.com/api/chat', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
