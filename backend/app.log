@@ -17,3 +17,70 @@
 2026-07-19 13:41:45,728 - faiss.loader - INFO - Successfully loaded faiss with AVX2 support.
 2026-07-19 13:41:48,962 - werkzeug - WARNING -  * Debugger is active!
 2026-07-19 13:41:48,964 - werkzeug - INFO -  * Debugger PIN: 103-477-634
+2026-07-19 14:11:11,430 - faiss.loader - INFO - Loading faiss with AVX2 support.
+2026-07-19 14:11:11,442 - faiss.loader - INFO - Successfully loaded faiss with AVX2 support.
+2026-07-19 14:11:15,984 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://198.18.0.1:5000
+2026-07-19 14:11:15,984 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-07-19 14:11:15,987 - werkzeug - INFO -  * Restarting with stat
+2026-07-19 14:11:17,006 - faiss.loader - INFO - Loading faiss with AVX2 support.
+2026-07-19 14:11:17,020 - faiss.loader - INFO - Successfully loaded faiss with AVX2 support.
+2026-07-19 14:11:20,236 - werkzeug - WARNING -  * Debugger is active!
+2026-07-19 14:11:20,238 - werkzeug - INFO -  * Debugger PIN: 103-477-634
+2026-07-19 14:11:49,267 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:11:49] "OPTIONS /api/login HTTP/1.1" 200 -
+2026-07-19 14:11:49,361 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:11:49] "POST /api/login HTTP/1.1" 200 -
+2026-07-19 14:11:50,940 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:11:50] "OPTIONS /api/user/info HTTP/1.1" 200 -
+2026-07-19 14:11:50,942 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:11:50] "OPTIONS /api/sessions HTTP/1.1" 200 -
+2026-07-19 14:11:50,944 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:11:50] "OPTIONS /api/user/info HTTP/1.1" 200 -
+2026-07-19 14:11:50,947 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:11:50] "OPTIONS /api/sessions HTTP/1.1" 200 -
+2026-07-19 14:11:50,955 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:11:50] "GET /api/user/info HTTP/1.1" 200 -
+2026-07-19 14:11:50,958 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:11:50] "GET /api/sessions HTTP/1.1" 200 -
+2026-07-19 14:11:50,962 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:11:50] "GET /api/user/info HTTP/1.1" 200 -
+2026-07-19 14:11:50,966 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:11:50] "GET /api/sessions HTTP/1.1" 200 -
+2026-07-19 14:11:51,026 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:11:51] "OPTIONS /api/history?session_id=af104e73-3fd5-43b8-b5d9-cc2fcbad478e HTTP/1.1" 200 -
+2026-07-19 14:11:51,037 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:11:51] "GET /api/history?session_id=af104e73-3fd5-43b8-b5d9-cc2fcbad478e HTTP/1.1" 200 -
+2026-07-19 14:11:53,241 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:11:53] "GET /api/user/info HTTP/1.1" 200 -
+2026-07-19 14:11:53,242 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:11:53] "OPTIONS /api/user/stats HTTP/1.1" 200 -
+2026-07-19 14:11:53,243 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:11:53] "OPTIONS /api/stats HTTP/1.1" 200 -
+2026-07-19 14:11:53,251 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:11:53] "GET /api/user/info HTTP/1.1" 200 -
+2026-07-19 14:11:53,272 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:11:53] "GET /api/stats HTTP/1.1" 200 -
+2026-07-19 14:11:53,277 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:11:53] "GET /api/user/stats HTTP/1.1" 200 -
+2026-07-19 14:15:13,744 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:13] "OPTIONS /api/user/info HTTP/1.1" 200 -
+2026-07-19 14:15:13,746 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:13] "OPTIONS /api/sessions HTTP/1.1" 200 -
+2026-07-19 14:15:13,747 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:13] "OPTIONS /api/user/info HTTP/1.1" 200 -
+2026-07-19 14:15:13,749 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:13] "OPTIONS /api/sessions HTTP/1.1" 200 -
+2026-07-19 14:15:13,753 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:13] "GET /api/user/info HTTP/1.1" 200 -
+2026-07-19 14:15:13,756 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:13] "GET /api/sessions HTTP/1.1" 200 -
+2026-07-19 14:15:13,759 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:13] "GET /api/user/info HTTP/1.1" 200 -
+2026-07-19 14:15:13,761 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:13] "GET /api/sessions HTTP/1.1" 200 -
+2026-07-19 14:15:13,802 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:13] "OPTIONS /api/history?session_id=af104e73-3fd5-43b8-b5d9-cc2fcbad478e HTTP/1.1" 200 -
+2026-07-19 14:15:13,807 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:13] "GET /api/history?session_id=af104e73-3fd5-43b8-b5d9-cc2fcbad478e HTTP/1.1" 200 -
+2026-07-19 14:15:16,983 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:16] "GET /api/user/info HTTP/1.1" 200 -
+2026-07-19 14:15:16,983 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:16] "OPTIONS /api/user/stats HTTP/1.1" 200 -
+2026-07-19 14:15:16,986 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:16] "OPTIONS /api/stats HTTP/1.1" 200 -
+2026-07-19 14:15:16,992 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:16] "GET /api/user/info HTTP/1.1" 200 -
+2026-07-19 14:15:17,002 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:17] "GET /api/stats HTTP/1.1" 200 -
+2026-07-19 14:15:17,007 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:17] "GET /api/user/stats HTTP/1.1" 200 -
+2026-07-19 14:15:18,026 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:18] "GET /api/user/info HTTP/1.1" 200 -
+2026-07-19 14:15:18,029 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:18] "GET /api/sessions HTTP/1.1" 200 -
+2026-07-19 14:15:18,033 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:18] "GET /api/user/info HTTP/1.1" 200 -
+2026-07-19 14:15:18,041 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:18] "GET /api/sessions HTTP/1.1" 200 -
+2026-07-19 14:15:18,054 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:18] "GET /api/history?session_id=af104e73-3fd5-43b8-b5d9-cc2fcbad478e HTTP/1.1" 200 -
+2026-07-19 14:15:21,570 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:21] "OPTIONS /api/user/info HTTP/1.1" 200 -
+2026-07-19 14:15:21,572 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:21] "OPTIONS /api/user/info HTTP/1.1" 200 -
+2026-07-19 14:15:21,582 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:21] "GET /api/user/info HTTP/1.1" 200 -
+2026-07-19 14:15:21,583 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:21] "GET /api/stats HTTP/1.1" 200 -
+2026-07-19 14:15:21,588 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:21] "GET /api/user/info HTTP/1.1" 200 -
+2026-07-19 14:15:21,591 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:21] "GET /api/user/stats HTTP/1.1" 200 -
+2026-07-19 14:15:26,419 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:26] "GET /api/user/info HTTP/1.1" 200 -
+2026-07-19 14:15:26,419 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:26] "OPTIONS /api/sessions HTTP/1.1" 200 -
+2026-07-19 14:15:26,420 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:26] "OPTIONS /api/sessions HTTP/1.1" 200 -
+2026-07-19 14:15:26,424 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:26] "GET /api/user/info HTTP/1.1" 200 -
+2026-07-19 14:15:26,428 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:26] "GET /api/sessions HTTP/1.1" 200 -
+2026-07-19 14:15:26,434 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:26] "GET /api/sessions HTTP/1.1" 200 -
+2026-07-19 14:15:26,437 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:26] "OPTIONS /api/history?session_id=af104e73-3fd5-43b8-b5d9-cc2fcbad478e HTTP/1.1" 200 -
+2026-07-19 14:15:26,446 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:15:26] "GET /api/history?session_id=af104e73-3fd5-43b8-b5d9-cc2fcbad478e HTTP/1.1" 200 -
+2026-07-19 14:18:55,435 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:18:55] "OPTIONS /api/user/profile HTTP/1.1" 200 -
+2026-07-19 14:18:55,438 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:18:55] "[31m[1mGET /api/user/profile HTTP/1.1[0m" 401 -

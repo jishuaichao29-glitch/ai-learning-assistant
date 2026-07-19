@@ -72,7 +72,7 @@ export default function ChatPage() {
     useRagRef.current = useRag;
   }, [useRag]);
   const { theme, toggleTheme } = useTheme();
-  const { token, logout } = useAuth();
+  const { token } = useAuth();
 
   useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
@@ -1289,13 +1289,6 @@ export default function ChatPage() {
             <span>👤</span>
             <span className="text-xs">个人中心</span>
           </Link>
-          <button
-            onClick={logout}
-            className="w-full py-2 rounded-xl dark:bg-red-900/20 bg-red-100 hover:dark:bg-red-900/30 hover:bg-red-200 dark:border border-red-500/30 border-red-300 text-red-600 transition-colors flex items-center justify-center space-x-2"
-          >
-            <span>🚪</span>
-            <span className="text-xs">退出登录</span>
-          </button>
           <div className="text-xs dark:text-neutral-500 text-gray-500 text-center mt-1">
             {sessions.length} 个对话
           </div>

@@ -146,13 +146,6 @@ export default function ProfileDashboard() {
     setTimeout(() => setShowToast(false), 3000);
   };
 
-  const handleLogout = () => {
-    if (confirm('确定要退出登录吗？')) {
-      logout();
-      router.push('/login');
-    }
-  };
-
   const handleCopyUID = () => {
     if (user) {
       const uid = `UID: ${10000 + user.id}`;
@@ -626,30 +619,6 @@ export default function ProfileDashboard() {
                 去绑定
               </button>
             </div>
-          </div>
-        </div>
-
-        <div className={`p-6 rounded-2xl backdrop-blur-md ${
-          theme === 'dark' ? 'bg-red-900/10 border border-red-500/20' : 'bg-red-50 border border-red-200'
-        }`}>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className={`text-sm font-medium ${theme === 'dark' ? 'text-red-400' : 'text-red-600'}`}>退出登录</p>
-              <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-neutral-500' : 'text-gray-500'}`}>
-                点击后将清除本地登录状态并返回登录页面
-              </p>
-            </div>
-            <button
-              onClick={handleLogout}
-              className={`px-6 py-2.5 rounded-xl font-medium transition flex items-center space-x-2 ${
-                theme === 'dark' 
-                  ? 'bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400' 
-                  : 'bg-red-100 hover:bg-red-200 border border-red-300 text-red-600'
-              }`}
-            >
-              <span>🚪</span>
-              <span>退出登录</span>
-            </button>
           </div>
         </div>
 
