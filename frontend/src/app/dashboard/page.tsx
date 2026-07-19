@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useTheme } from '../ThemeProvider';
 import { useAuth } from '../AuthProvider';
 import ProtectedRoute from '../ProtectedRoute';
+import { ArrowLeft } from 'lucide-react';
 
 interface WeeklyActivity {
   date: string;
@@ -106,7 +108,18 @@ export default function DashboardPage() {
         <div className={`p-6 lg:p-12 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
           <div className="max-w-6xl mx-auto">
             <div className="mb-8">
-              <h1 className={`text-3xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+              <Link 
+                href="/chat"
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm transition-all duration-300 hover:scale-105 ${
+                  theme === 'dark' 
+                    ? 'bg-white/[0.05] text-neutral-300 hover:bg-white/[0.1] hover:text-white' 
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-gray-900'
+                }`}
+              >
+                <ArrowLeft className="w-4 h-4" />
+                返回聊天大厅
+              </Link>
+              <h1 className={`text-3xl font-bold mt-6 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
                 📊 学情数据看板
               </h1>
               <p className={`text-sm mt-2 ${theme === 'dark' ? 'text-neutral-400' : 'text-gray-500'}`}>
