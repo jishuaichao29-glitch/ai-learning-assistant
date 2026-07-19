@@ -625,3 +625,11 @@
 2026-07-19 14:50:13,666 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:50:13] "POST /api/chat/breakpoint HTTP/1.1" 200 -
 2026-07-19 14:50:25,282 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:50:25] "OPTIONS /api/chat HTTP/1.1" 200 -
 2026-07-19 14:50:32,566 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 14:50:32] "POST /api/chat HTTP/1.1" 200 -
+2026-07-19 15:05:27,088 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 15:05:27] "OPTIONS /api/user/info HTTP/1.1" 200 -
+2026-07-19 15:05:27,089 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 15:05:27] "OPTIONS /api/user/info HTTP/1.1" 200 -
+2026-07-19 15:05:27,092 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 15:05:27] "OPTIONS /api/sessions HTTP/1.1" 200 -
+2026-07-19 15:05:27,096 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 15:05:27] "GET /api/user/info HTTP/1.1" 200 -
+2026-07-19 15:05:27,102 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 15:05:27] "GET /api/sessions HTTP/1.1" 200 -
+2026-07-19 15:05:27,102 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 15:05:27] "GET /api/user/info HTTP/1.1" 200 -
+2026-07-19 15:05:27,119 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 15:05:27] "OPTIONS /api/history?session_id=245e5f46-9cd8-4698-afc5-49158f9ad1e3 HTTP/1.1" 200 -
+2026-07-19 15:05:27,128 - werkzeug - INFO - 127.0.0.1 - - [19/Jul/2026 15:05:27] "GET /api/history?session_id=245e5f46-9cd8-4698-afc5-49158f9ad1e3 HTTP/1.1" 200 -
